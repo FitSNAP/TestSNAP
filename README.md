@@ -1,2 +1,0 @@
-# TestSNAP
-SNAP Proxy app
