@@ -1,0 +1,29 @@
+# Build and run instructions
+#---------------------------
+# 
+# move to src directory
+# set value of REFDATA_TWOJ in Makefile
+#      8: production code
+#     14: ECP benchmark value
+#      2: Minimal value for debugging 
+[prompt]$ cd src
+[prompt]$ emacs Makefile
+[prompt]$ make clean
+/bin/rm -f *.o test_snap.exe
+[prompt]$ make
+echo *.cpp
+memory.cpp sna.cpp test_snap.cpp
+g++ -O2  -std=c++11 *.cpp -o test_snap.exe
+[prompt]$ ./test_snap.exe
+-----------------------
+Summary of TestSNAP run
+-----------------------
+natoms = 2000 
+nghostatoms = 2941 
+nsteps = 1 
+nneighs = 26 
+twojmax = 8 
+duration = 1.40856 [sec]
+step time = 1.40856 [sec/step]
+grind time = 0.704279 [msec/atom-step]
+RMS |Fj| deviation 3.35305e-14 [eV/A]
