@@ -67,7 +67,11 @@ public:
 
   inline T& operator()(unsigned i1) { return dptr[i1]; }
 
-  Array1D() = default;
+  Array1D()
+  {
+    n1 = size = 0;
+    dptr = NULL;
+  }
 
   Array1D(const Array1D& p)
   {
