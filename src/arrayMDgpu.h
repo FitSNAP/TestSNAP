@@ -112,7 +112,11 @@ struct Array2D
     return dptr[i1 + (n1 * i2)];
   }
 
-  Array2D() = default;
+  Array2D()
+  {
+    n1 = n2 = size = 0;
+    dptr = NULL;
+  }
 
   Array2D(const Array2D& p)
   {
@@ -159,7 +163,11 @@ struct Array3D
     return dptr[i1 + i2 * n1 + i3 * n2 * n1];
   }
 
-  Array3D() = default;
+  Array3D()
+  {
+    n1 = n2 = n3 = size = f2 = f3 = 0;
+    dptr = NULL;
+  }
 
   Array3D(const Array3D& p)
   {
@@ -205,7 +213,7 @@ struct Array3D
   }
 
 private:
-  unsigned f2, f3, b1, b2;
+  unsigned f2, f3;
 };
 
 template<typename T>
@@ -220,7 +228,12 @@ struct Array4D
     return dptr[i4 * n1 * n2 * n3 + i3 * n1 * n2 + i2 * n1 + i1];
   }
 
-  Array4D() = default;
+  Array4D()
+  {
+    n1 = n2 = n3 = n4 = size = f2 = f3 = f4 = 0;
+    dptr = NULL;
+  }
+
 
   Array4D(const Array4D& p)
   {
@@ -272,7 +285,7 @@ struct Array4D
   }
 
 private:
-  unsigned f2, f3, f4, b1, b2, b3;
+  unsigned f2, f3, f4;
 };
 
 #endif
