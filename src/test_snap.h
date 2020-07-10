@@ -1,19 +1,19 @@
 // ----------------------------------------------------------------------
-// Copyright (2019) Sandia Corporation. 
-// Under the terms of Contract DE-AC04-94AL85000 
-// with Sandia Corporation, the U.S. Government 
-// retains certain rights in this software. This 
-// software is distributed under the Zero Clause 
+// Copyright (2019) Sandia Corporation.
+// Under the terms of Contract DE-AC04-94AL85000
+// with Sandia Corporation, the U.S. Government
+// retains certain rights in this software. This
+// software is distributed under the Zero Clause
 // BSD License
 //
 // TestSNAP - A prototype for the SNAP force kernel
 // Version 0.0.2
-// Main changes: Y array trick, memory compaction 
+// Main changes: Y array trick, memory compaction
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
 //
-// Additional authors: 
+// Additional authors:
 // Sarah Anderson
 // Rahul Gayatri
 // Steve Plimpton
@@ -26,38 +26,42 @@
 // Mitch Wood
 //
 // ----------------------------------------------------------------------
+#ifndef LMP_TESTSNAP_H
+#define LMP_TESTSNAP_H
 
-// Memory class
+#include "memory.h"
+#include "sna.h"
 
 Memory* memory = NULL;
-
 // MD data
 
-int ninside;            // num neighbors per atom
-int nlocal;             // number of local atoms
-int nghost;             // number of ghost atoms
-int ntotal;             // number of total atoms
-int nsteps = 1;              // num of force evaluations
-double **f = NULL;           // atom forces
-SNADOUBLE *coeffi = NULL;     // beta coefficients for atom i
-int ncoeff;                  // number of beta coefficients
+int nnbor; // num neighbors per atom
+int natoms;
+int nghost;     // number of ghost atoms
+int ntotal;     // number of total atoms
+int nsteps = 1; // num of force evaluations
+double** f;
+int ncoeff; // number of beta coefficients
 
 // SNAP data
 
 SNA* snaptr = NULL;
-double rcutfac;             // SNAP parameter, set by refdata
-int twojmax;                // SNAP parameter, set by refdata
-double rfac0 = 0.99363;     // SNAP parameter
-double rmin0 = 0.0;         // SNAP parameter
-int switchflag = 1;         // SNAP parameter
-int bzeroflag = 1;          // SNAP parameter
-int quadraticflag = 0;      // SNAP parameter
+double rcutfac;         // SNAP parameter, set by refdata
+int twojmax;            // SNAP parameter, set by refdata
+double rfac0 = 0.99363; // SNAP parameter
+double rmin0 = 0.0;     // SNAP parameter
+int switchflag = 1;     // SNAP parameter
+int bzeroflag = 1;      // SNAP parameter
+int quadraticflag = 0;  // SNAP parameter
 
 // function declarations
 
-void options(int, char*[]);
-void init();
-void compute();
+void
+options(int, char*[]);
+void
+init();
+void
+compute();
 
 // timer classes
 
@@ -66,8 +70,10 @@ typedef std::chrono::duration<float> myduration;
 
 // math stuff
 
-static const double MY_PI  = 3.14159265358979323846; // pi
+static const double MY_PI = 3.14159265358979323846; // pi
 
 // error tally
 
 double sumsqferr;
+
+#endif

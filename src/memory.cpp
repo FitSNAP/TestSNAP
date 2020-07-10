@@ -1,19 +1,19 @@
 // ----------------------------------------------------------------------
-// Copyright (2019) Sandia Corporation. 
-// Under the terms of Contract DE-AC04-94AL85000 
-// with Sandia Corporation, the U.S. Government 
-// retains certain rights in this software. This 
-// software is distributed under the Zero Clause 
+// Copyright (2019) Sandia Corporation.
+// Under the terms of Contract DE-AC04-94AL85000
+// with Sandia Corporation, the U.S. Government
+// retains certain rights in this software. This
+// software is distributed under the Zero Clause
 // BSD License
 //
 // TestSNAP - A prototype for the SNAP force kernel
 // Version 0.0.2
-// Main changes: Y array trick, memory compaction 
+// Main changes: Y array trick, memory compaction
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
 //
-// Additional authors: 
+// Additional authors:
 // Sarah Anderson
 // Rahul Gayatri
 // Steve Plimpton
@@ -71,7 +71,6 @@ void *Memory::smalloc(bigint nbytes, const char *name)
   void *ptr = malloc(nbytes);
 #endif
   if (ptr == NULL) {
-    char str[128];
     printf("Failed to allocate " BIGINT_FORMAT " bytes for array %s",
             nbytes,name);
     exit(1);
@@ -105,7 +104,6 @@ void *Memory::srealloc(void *ptr, bigint nbytes, const char *name)
   ptr = realloc(ptr,nbytes);
 #endif
   if (ptr == NULL) {
-    char str[128];
     printf("Failed to reallocate " BIGINT_FORMAT " bytes for array %s",
             nbytes,name);
     exit(1);
@@ -133,7 +131,6 @@ void Memory::sfree(void *ptr)
 
 void Memory::fail(const char *name)
 {
-  char str[128];
   printf("Cannot create/grow a vector/array of pointers for %s",name);
   exit(1);
 }
