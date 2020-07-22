@@ -11,21 +11,15 @@ if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
 endif()
 
 SET(MyTarget test_snap)
+FILE(GLOB sources
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/*.h
+  )
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_STANDARD 17)
 
 ADD_EXECUTABLE(
   ${MyTarget}
-  ${CMAKE_SOURCE_DIR}/sna.cpp
-  ${CMAKE_SOURCE_DIR}/test_snap.cpp
-  ${CMAKE_SOURCE_DIR}/memory.cpp
-  ${CMAKE_SOURCE_DIR}/test_snap.h
-  ${CMAKE_SOURCE_DIR}/sna.h
-  ${CMAKE_SOURCE_DIR}/memory.h
-  ${CMAKE_SOURCE_DIR}/arrayMDgpu.h
-  ${CMAKE_SOURCE_DIR}/arrayMDcpu.h
+  ${sources}
   )
 
 target_compile_definitions(${MyTarget} PRIVATE REFDATA_TWOJ=${ref_data})
