@@ -301,13 +301,14 @@ SNA::compute_ui()
 
   int nTotal = num_atoms_loc * num_nbor_loc;
 
-  int numThreads;
+  int numThreads,numBlocks;
 #if defined(KOKKOS_ENABLE_CUDA)
   numThreads = 32;
+  numBlocks = nTotal / numThreads + 1;
 #else
   numThreads = 1;
+  numBlocks = nTotal;
 #endif
-  int numBlocks = nTotal / numThreads + 1;
 
   team_policy policy(numBlocks, numThreads);
 
@@ -383,9 +384,6 @@ SNA::compute_ui()
             ulist_loc(natom, nbor, jju) = ulist_jju1;
             ulist_loc(natom, nbor, jju + 1) = ulist_jju2;
 
-            //          u1(natom,nbor,u_index) = ulist_jju1;
-            //          u1(natom,nbor,u_index+1) = ulist_jju2;
-
             ulist_jju1 = ulist_jju2;
 
             jju++;
@@ -422,9 +420,6 @@ SNA::compute_ui()
               ulist_loc(natom, nbor, jju + 1).im +=
                 -rootpq * (b_r * -ulist_loc(natom, nbor, jjup).im -
                            b_i * ulist_loc(natom, nbor, jjup).re);
-
-              //          u1(natom,nbor,u_index) = ulist_jju1;
-              //          u1(natom,nbor,u_index+1) = ulist_jju2;
 
               jju++;
               jjup--;

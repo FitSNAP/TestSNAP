@@ -1,19 +1,19 @@
 // ----------------------------------------------------------------------
-// Copyright (2019) Sandia Corporation. 
-// Under the terms of Contract DE-AC04-94AL85000 
-// with Sandia Corporation, the U.S. Government 
-// retains certain rights in this software. This 
-// software is distributed under the Zero Clause 
+// Copyright (2019) Sandia Corporation.
+// Under the terms of Contract DE-AC04-94AL85000
+// with Sandia Corporation, the U.S. Government
+// retains certain rights in this software. This
+// software is distributed under the Zero Clause
 // BSD License
 //
 // TestSNAP - A prototype for the SNAP force kernel
 // Version 0.0.2
-// Main changes: Y array trick, memory compaction 
+// Main changes: Y array trick, memory compaction
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
 //
-// Additional authors: 
+// Additional authors:
 // Sarah Anderson
 // Rahul Gayatri
 // Steve Plimpton
@@ -31,7 +31,7 @@
 #define LMP_MEMORY_H
 
 #include "lmptype.h"
- 
+
 class Memory {
 public:
   Memory();
@@ -64,7 +64,7 @@ public:
 
   template <typename TYPE>
   TYPE **create(TYPE **& /*array*/, int /*n*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    grow or shrink 1d array
@@ -73,7 +73,7 @@ public:
   template <typename TYPE>
   TYPE *grow(TYPE *&array, int n, const char *name)
   {
-    if (array == NULL) return create(array,n,name);
+    if (array == nullptr) return create(array,n,name);
 
     bigint nbytes = ((bigint) sizeof(TYPE)) * n;
     array = (TYPE *) srealloc(array,nbytes,name);
@@ -82,7 +82,7 @@ public:
 
   template <typename TYPE>
   TYPE **grow(TYPE **& /*array*/, int /*n*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 1d array
@@ -91,7 +91,7 @@ public:
   template <typename TYPE>
   void destroy(TYPE *&array) {
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -110,7 +110,7 @@ public:
 
   template <typename TYPE>
   TYPE **create1d_offset(TYPE **& /*array*/, int /*nlo*/, int /*nhi*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 1d array with index offset
@@ -120,7 +120,7 @@ public:
   void destroy1d_offset(TYPE *&array, int offset)
   {
     if (array) sfree(&array[offset]);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -145,7 +145,7 @@ public:
 
   template <typename TYPE>
   TYPE ***create(TYPE ***& /*array*/, int /*n1*/, int /*n2*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    grow or shrink 1st dim of a 2d array
@@ -155,7 +155,7 @@ public:
   template <typename TYPE>
   TYPE **grow(TYPE **&array, int n1, int n2, const char *name)
   {
-    if (array == NULL) return create(array,n1,n2,name);
+    if (array == nullptr) return create(array,n1,n2,name);
 
     bigint nbytes = ((bigint) sizeof(TYPE)) * n1*n2;
     TYPE *data = (TYPE *) srealloc(array[0],nbytes,name);
@@ -172,7 +172,7 @@ public:
 
   template <typename TYPE>
   TYPE ***grow(TYPE ***& /*array*/, int /*n1*/, int /*n2*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 2d array
@@ -181,10 +181,10 @@ public:
   template <typename TYPE>
   void destroy(TYPE **&array)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(array[0]);
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -212,7 +212,7 @@ public:
 
   template <typename TYPE>
   TYPE ***create_ragged(TYPE ***& /*array*/, int /*n1*/, int * /*n2*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    create a 2d array with 2nd index from n2lo to n2hi inclusive
@@ -231,7 +231,7 @@ public:
 
   template <typename TYPE>
   TYPE ***create2d_offset(TYPE ***& /*array*/, int /*n1*/, int /*n2lo*/, int /*n2hi*/,
-                          const char *name) {fail(name); return NULL;}
+                          const char *name) {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 2d array with 2nd index offset
@@ -240,10 +240,10 @@ public:
   template <typename TYPE>
   void destroy2d_offset(TYPE **&array, int offset)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(&array[0][offset]);
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -276,7 +276,7 @@ public:
 
   template <typename TYPE>
   TYPE ****create(TYPE ****& /*array*/, int /*n1*/, int /*n2*/, int /*n3*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    grow or shrink 1st dim of a 3d array
@@ -286,7 +286,7 @@ public:
   template <typename TYPE>
   TYPE ***grow(TYPE ***&array, int n1, int n2, int n3, const char *name)
   {
-    if (array == NULL) return create(array,n1,n2,n3,name);
+    if (array == nullptr) return create(array,n1,n2,n3,name);
 
     bigint nbytes = ((bigint) sizeof(TYPE)) * n1*n2*n3;
     TYPE *data = (TYPE *) srealloc(array[0][0],nbytes,name);
@@ -311,7 +311,7 @@ public:
 
   template <typename TYPE>
   TYPE ****grow(TYPE ****& /*array*/, int /*n1*/, int /*n2*/, int /*n3*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 3d array
@@ -320,11 +320,11 @@ public:
   template <typename TYPE>
   void destroy(TYPE ***&array)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(array[0][0]);
     sfree(array[0]);
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -345,7 +345,7 @@ public:
   template <typename TYPE>
   TYPE ****create3d_offset(TYPE ****& /*array*/, int /*n1lo*/, int /*n1hi*/,
                            int /*n2*/, int /*n3*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    free a 3d array with 1st index offset
@@ -354,11 +354,11 @@ public:
   template <typename TYPE>
   void destroy3d_offset(TYPE ***&array, int offset)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(&array[offset][0][0]);
     sfree(&array[offset][0]);
     sfree(&array[offset]);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -390,7 +390,7 @@ public:
   TYPE ****create3d_offset(TYPE ****& /*array*/, int /*n1lo*/, int /*n1hi*/,
                            int /*n2lo*/, int /*n2hi*/, int /*n3lo*/, int /*n3hi*/,
                            const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    free a 3d array with all 3 indices offset
@@ -400,11 +400,11 @@ public:
   void destroy3d_offset(TYPE ***&array,
                         int n1_offset, int n2_offset, int n3_offset)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(&array[n1_offset][n2_offset][n3_offset]);
     sfree(&array[n1_offset][n2_offset]);
     sfree(&array[n1_offset]);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -447,7 +447,7 @@ public:
   template <typename TYPE>
   TYPE *****create(TYPE *****& /*array*/, int /*n1*/, int /*n2*/, int /*n3*/, int /*n4*/,
                    const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 4d array
@@ -456,12 +456,12 @@ public:
   template <typename TYPE>
   void destroy(TYPE ****&array)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(array[0][0][0]);
     sfree(array[0][0]);
     sfree(array[0]);
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -494,7 +494,7 @@ public:
   TYPE ****create4d_offset(TYPE *****& /*array*/, int /*n1*/, int /*n2lo*/, int /*n2hi*/,
                            int /*n3lo*/, int /*n3hi*/, int /*n4lo*/, int /*n4hi*/,
                            const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    free a 4d array with indices 2,3, and 4 offset
@@ -504,12 +504,12 @@ public:
   void destroy4d_offset(TYPE ****&array,
                         int n2_offset, int n3_offset, int n4_offset)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(&array[0][n2_offset][n3_offset][n4_offset]);
     sfree(&array[0][n2_offset][n3_offset]);
     sfree(&array[0][n2_offset]);
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -561,7 +561,7 @@ public:
   template <typename TYPE>
   TYPE ******create(TYPE ******& /*array*/, int /*n1*/, int /*n2*/, int /*n3*/, int /*n4*/,
                     int /*n5*/, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 5d array
@@ -570,13 +570,13 @@ public:
   template <typename TYPE>
   void destroy(TYPE *****&array)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(array[0][0][0][0]);
     sfree(array[0][0][0]);
     sfree(array[0][0]);
     sfree(array[0]);
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------
@@ -639,7 +639,7 @@ public:
   template <typename TYPE>
   TYPE *******create(TYPE *******&array, int n1, int n2, int n3, int n4,
                      int n5, int n6, const char *name)
-  {fail(name); return NULL;}
+  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 6d array
@@ -648,14 +648,14 @@ public:
   template <typename TYPE>
   void destroy(TYPE ******&array)
   {
-    if (array == NULL) return;
+    if (array == nullptr) return;
     sfree(array[0][0][0][0][0]);
     sfree(array[0][0][0][0]);
     sfree(array[0][0][0]);
     sfree(array[0][0]);
     sfree(array[0]);
     sfree(array);
-    array = NULL;
+    array = nullptr;
   }
 
 /* ----------------------------------------------------------------------

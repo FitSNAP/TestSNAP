@@ -3,7 +3,6 @@ KOKKOS_PATH = $(HOME)/Kokkos/kokkos
 ref_data:=2
 DEFINE = -DREFDATA_TWOJ=$(ref_data)
 
-CXXFLAGS = -O3 $(DEFINE)
 LINK = ${CXX}
 LINKFLAGS =
 
@@ -11,7 +10,7 @@ LINKFLAGS =
 ifeq ($(DEVICE),openmp)
 	KOKKOS_DEVICES = "OpenMP"
 	CXX = g++
-	CXXFLAGS += -fopenmp
+	DEFINE += -fopenmp
 	LINKFLAGS += -fopenmp
 	EXE = ${EXE_NAME}.openmp
 else ifeq ($(DEVICE),cuda)
@@ -20,16 +19,13 @@ else ifeq ($(DEVICE),cuda)
 	EXE = ${EXE_NAME}.cuda
 	KOKKOS_ARCH = "Volta70"
 	KOKKOS_CUDA_OPTIONS = "enable_lambda -lineinfo"
-else ifeq ($(DEVICE),openmptarget)
-	KOKKOS_DEVICES = "OpenMPTarget"
-	KOKKOS_ARCH = "Volta70"
-	CXX=clang++
-	EXE = ${EXE_NAME}.openmptarget
 else
 	KOKKOS_DEVICES = "Serial"
 	CXX = g++
 	EXE = ${EXE_NAME}.host
 endif
+
+CXXFLAGS = -O3 $(DEFINE)
 
 EXE_NAME = "test_snap"
 
