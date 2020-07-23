@@ -284,6 +284,7 @@ compute()
   deep_copy(snaptr->wj, snaptr->h_wj);
   deep_copy(snaptr->rcutij, snaptr->h_rcutij);
 
+#if defined(KOKKOS_ENABLE_CUDA)
   start = system_clock::now();
   snaptr->compute_ui();
   end = system_clock::now();
@@ -293,6 +294,25 @@ compute()
   // compute_yi
   start = system_clock::now();
   snaptr->compute_yi();
+  end = system_clock::now();
+  elapsed = end - start;
+  elapsed_yi += elapsed.count();
+
+  start = system_clock::now();
+  snaptr->compute_fused_deidrj();
+  end = system_clock::now();
+  elapsed = end - start;
+  elapsed_duidrj += elapsed.count();
+#else
+  start = system_clock::now();
+  snaptr->compute_ui_cpu();
+  end = system_clock::now();
+  elapsed = end - start;
+  elapsed_ui += elapsed.count();
+
+  // compute_yi
+  start = system_clock::now();
+  snaptr->compute_yi_cpu();
   end = system_clock::now();
   elapsed = end - start;
   elapsed_yi += elapsed.count();
@@ -309,6 +329,7 @@ compute()
   end = system_clock::now();
   elapsed = end - start;
   elapsed_deidrj += elapsed.count();
+#endif
 
   deep_copy(snaptr->h_dedr, snaptr->dedr);
   compute_forces(snaptr);

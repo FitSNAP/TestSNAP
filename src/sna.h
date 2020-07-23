@@ -63,14 +63,19 @@ public:
   // functions for bispectrum coefficients
 
   void compute_ui();
+  void compute_ui_cpu();
   void ui_launch();
   void update_ulisttot_launch();
 
   void compute_yi();
+  void compute_yi_cpu();
   void compute_yi_reduce_idxz();
   void ulisttot_transpose_launch();
   void yi_zero_launch();
   void yi_launch();
+#if defined(KOKKOS_ENABLE_CUDA)
+  void compute_fused_deidrj();
+#endif
 
   // functions for derivatives
 

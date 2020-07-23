@@ -252,27 +252,6 @@ SNA::grow_rij(int newnmax)
 }
 
 /* ----------------------------------------------------------------------
-  Transpose ulisttot from column major to row major, i.e, leftLayout to
-rightLayout
-------------------------------------------------------------------------- */
-
-void
-SNA::ulisttot_transpose_launch()
-{
-  auto ulisttot_loc = ulisttot;
-  auto ulisttot_r_loc = ulisttot_r;
-  auto idxu_max_loc = idxu_max;
-  auto num_atoms_loc = num_atoms;
-
-  parallel_for(
-    num_atoms_loc * idxu_max, LAMMPS_LAMBDA(const int iter) {
-      int natom = iter / idxu_max_loc;
-      int j = iter % idxu_max_loc;
-      ulisttot_r_loc(natom, j) = ulisttot_loc(natom, j);
-    });
-}
-
-/* ----------------------------------------------------------------------
    compute Ui by summing over neighbors j
 ------------------------------------------------------------------------- */
 
@@ -284,10 +263,230 @@ SNA::compute_ui()
 
   auto num_atoms_loc = num_atoms;
   auto num_nbor_loc = num_nbor;
+  auto idxu_block_loc = idxu_block;
+  auto rootpqarray_loc = rootpqarray;
+  auto twojmax_loc = twojmax;
+  auto rij_loc = rij;
+  auto rcutij_loc = rcutij;
+  auto wj_loc = wj;
+  auto MY_PI_loc = MY_PI;
+  auto rmin0_loc = rmin0;
+  auto rfac0_loc = rfac0;
+  auto ulisttot_loc = ulisttot;
+  bool switch_flag_loc = switch_flag;
+  auto ulist_parity_loc = ulist_parity;
+
+  int nTotal = num_atoms_loc * num_nbor_loc;
+
+  int ui_team_size = 4;
+  int vector_size = 32;
+  int numBlocks = nTotal / ui_team_size + 1;
+
+  team_policy policy_ui(numBlocks, ui_team_size, vector_size);
+
+  const int scratch_level = 0;
+
+  // scratch memory views for SNAcomplex
+  using ScratchViewType =
+    View<SNAcomplex*, ExecSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
+  const int PerTeamScratch = (twojmax_loc + 1) * (twojmax_loc / 2 + 1);
+  int scratch_size =
+    ScratchViewType::shmem_size(ui_team_size * 2 * PerTeamScratch);
+  policy_ui = policy_ui.set_scratch_size(scratch_level, PerTeam(scratch_size));
+
+  parallel_for(
+    policy_ui, LAMMPS_LAMBDA(const member_type team_member) {
+      parallel_for(
+        TeamThreadRange(team_member, ui_team_size), [&](const int not_using) {
+          int iter = team_member.league_rank() * team_member.team_size() +
+                     team_member.team_rank();
+          if (iter < nTotal) {
+            int nbor = iter / num_atoms_loc;
+            int natom = iter % num_atoms_loc;
+
+            ScratchViewType buf1(team_member.team_scratch(scratch_level),
+                                 ui_team_size * PerTeamScratch);
+
+            ScratchViewType buf2(team_member.team_scratch(scratch_level),
+                                 ui_team_size * PerTeamScratch);
+
+            // thread id's and the index for the start of the buffer for
+            // each thread.
+            const int tid = team_member.team_rank();
+            const int tid_index = tid * PerTeamScratch;
+
+            parallel_for(ThreadVectorRange(team_member, PerTeamScratch),
+                         [&](const int i) {
+                           buf1[tid_index + i] = { 0.0, 0.0 };
+                           //               buf2[tid_index + i] = { 0.0, 0.0 };
+                         });
+            buf2[tid_index] = { 1.0, 0.0 };
+
+            SNADOUBLE x = rij_loc(natom, nbor, 0);
+            SNADOUBLE y = rij_loc(natom, nbor, 1);
+            SNADOUBLE z = rij_loc(natom, nbor, 2);
+            SNADOUBLE rsq = x * x + y * y + z * z;
+            SNADOUBLE r = sqrt(rsq);
+            SNADOUBLE theta0 = (r - rmin0_loc) * rfac0_loc * MY_PI_loc /
+                             (rcutij_loc(natom, nbor) - rmin0_loc);
+            SNADOUBLE z0 = r / tan(theta0);
+
+            //  //This part is compute_uarray
+            SNADOUBLE r0inv;
+            SNADOUBLE a_r, b_r, a_i, b_i;
+            SNADOUBLE rootpq;
+
+            r0inv = 1.0 / sqrt(r * r + z0 * z0);
+            a_r = r0inv * z0;
+            a_i = -r0inv * z;
+            b_r = r0inv * y;
+            b_i = -r0inv * x;
+
+            SNADOUBLE sfac = compute_sfac_loc(
+              r, rcutij_loc(natom, nbor), switch_flag_loc, rmin0_loc);
+
+            sfac *= wj_loc(natom, nbor);
+
+            Kokkos::single(Kokkos::PerThread(team_member), [=]() {
+              Kokkos::atomic_add(&(ulisttot_loc(0, natom).re),
+                                 sfac * buf2[tid_index].re);
+            });
+
+            for (int j = 1; j <= twojmax_loc; j++) {
+              int jju = idxu_block_loc(j);
+              int jju0 = jju;
+              int jjup = idxu_block_loc(j - 1);
+
+              // Collapse ma and mb loops
+              int mb_max = (j + 1) / 2;
+              int ma_max = j;
+              int m_max = mb_max * ma_max;
+
+              // fill in left side of matrix layer from previous layer
+              // jju
+              parallel_for(
+                ThreadVectorRange(team_member, m_max), [&](const int m_iter) {
+                  const int mb = m_iter / ma_max;
+                  const int ma = m_iter % ma_max;
+
+                  const int buf1_index = tid_index + mb * (ma_max + 1) + ma;
+                  const int buf2_index = tid_index + m_iter;
+
+                  rootpq = rootpqarray_loc(j - ma, j - mb);
+                  buf1[buf1_index].re += rootpq * (a_r * buf2[buf2_index].re +
+                                                   a_i * buf2[buf2_index].im);
+                  buf1[buf1_index].im += rootpq * (a_r * buf2[buf2_index].im -
+                                                   a_i * buf2[buf2_index].re);
+                });
+
+              // jju+1
+              parallel_for(
+                ThreadVectorRange(team_member, m_max), [&](const int m_iter) {
+                  const int mb = m_iter / ma_max;
+                  const int ma = m_iter % ma_max;
+
+                  const int buf1_index = tid_index + mb * (ma_max + 1) + ma + 1;
+                  const int buf2_index = tid_index + m_iter;
+
+                  rootpq = rootpqarray_loc(ma + 1, j - mb);
+                  buf1[buf1_index].re += -rootpq * (b_r * buf2[buf2_index].re +
+                                                    b_i * buf2[buf2_index].im);
+                  buf1[buf1_index].im += -rootpq * (b_r * buf2[buf2_index].im -
+                                                    b_i * buf2[buf2_index].re);
+                });
+
+              jjup += m_max - 1;
+              jju += mb_max * (ma_max + 1);
+
+              // handle middle column using inversion symmetry of previous
+              // layer
+              if (j % 2 == 0) {
+                int mb = j / 2;
+                int buf_jju = tid_index + mb_max * (ma_max + 1);
+                buf1[buf_jju] = { 0.0, 0.0 };
+                int buf2_index = tid_index + m_max - 1;
+
+                parallel_for(ThreadVectorRange(team_member, j),
+                             [&](const int ma) {
+                               rootpq = ulist_parity_loc(jjup - ma) *
+                                        rootpqarray_loc(j - ma, j - mb);
+                               buf1[buf_jju + ma].re +=
+                                 rootpq * (a_r * buf2[buf2_index - ma].re +
+                                           a_i * -buf2[buf2_index - ma].im);
+                               buf1[buf_jju + ma].im +=
+                                 rootpq * (a_r * -buf2[buf2_index - ma].im -
+                                           a_i * buf2[buf2_index - ma].re);
+                             });
+
+                parallel_for(ThreadVectorRange(team_member, j),
+                             [&](const int ma) {
+                               rootpq = ulist_parity_loc(jjup - ma) *
+                                        rootpqarray_loc(ma + 1, j - mb);
+                               buf1[buf_jju + ma + 1].re +=
+                                 -rootpq * (b_r * buf2[buf2_index - ma].re +
+                                            b_i * -buf2[buf2_index - ma].im);
+                               buf1[buf_jju + ma + 1].im +=
+                                 -rootpq * (b_r * -buf2[buf2_index - ma].im -
+                                            b_i * buf2[buf2_index - ma].re);
+                             });
+              } // middle loop end
+
+              // Add uarraytot for left half.
+              mb_max = j / 2 + 1;
+              ma_max = j + 1;
+              m_max = mb_max * ma_max;
+              parallel_for(
+                ThreadVectorRange(team_member, m_max), [&](const int m_iter) {
+                  Kokkos::atomic_add(&(ulisttot_loc(jju0 + m_iter, natom).re),
+                                     sfac * buf1[tid_index + m_iter].re);
+                  Kokkos::atomic_add(&(ulisttot_loc(jju0 + m_iter, natom).im),
+                                     sfac * buf1[tid_index + m_iter].im);
+                });
+
+              // Add uarraytot for right half.
+              jjup = jju0 + (j + 1) * (j + 1) - 1;
+              mb_max = (j + 1) / 2;
+              m_max = mb_max * ma_max;
+
+              parallel_for(
+                ThreadVectorRange(team_member, m_max), [&](const int m_iter) {
+                  Kokkos::atomic_add(&(ulisttot_loc(jjup - m_iter, natom).re),
+                                     sfac * ulist_parity_loc(jju0 + m_iter) *
+                                       buf1[tid_index + m_iter].re);
+                  Kokkos::atomic_add(&(ulisttot_loc(jjup - m_iter, natom).im),
+                                     sfac * ulist_parity_loc(jju0 + m_iter) *
+                                       -buf1[tid_index + m_iter].im);
+                });
+
+              // Swap buffers and initialize buf1 to zeros
+              auto tmp = buf2;
+              buf2 = buf1;
+              buf1 = tmp;
+
+              parallel_for(ThreadVectorRange(team_member, PerTeamScratch),
+                           [&](const int i) {
+                             buf1[tid_index + i] = { 0.0, 0.0 };
+                           });
+
+            } // twojmax
+          }   // iter
+        });   // TeamThreadRange
+    });       // League
+
+  Kokkos::fence();
+}
+
+void
+SNA::compute_ui_cpu()
+{
+  zero_uarraytot();
+  addself_uarraytot(wself);
+
+  auto num_atoms_loc = num_atoms;
+  auto num_nbor_loc = num_nbor;
   auto ulist_loc = ulist;
   auto idxu_block_loc = idxu_block;
   auto rootpqarray_loc = rootpqarray;
-  auto ulist_ij_loc = ulist_ij;
   auto twojmax_loc = twojmax;
   auto rij_loc = rij;
   auto rcutij_loc = rcutij;
@@ -302,13 +501,8 @@ SNA::compute_ui()
   int nTotal = num_atoms_loc * num_nbor_loc;
 
   int numThreads,numBlocks;
-#if defined(KOKKOS_ENABLE_CUDA)
-  numThreads = 32;
-  numBlocks = nTotal / numThreads + 1;
-#else
   numThreads = 1;
   numBlocks = nTotal;
-#endif
 
   team_policy policy(numBlocks, numThreads);
 
@@ -461,7 +655,6 @@ SNA::compute_ui()
       }
     }); // natom && nbor
 
-  ulisttot_transpose_launch();
   Kokkos::fence();
 }
 
@@ -477,7 +670,105 @@ SNA::compute_yi()
   auto cglist_loc = cglist;
   auto idxu_block_loc = idxu_block;
   auto idxdu_block_loc = idxdu_block;
-  auto ulisttot_loc = ulisttot_r;
+  auto ulisttot_loc = ulisttot;
+  auto idxcg_block_loc = idxcg_block;
+  team_policy policy(num_atoms, Kokkos::AUTO);
+
+  parallel_for(
+    policy, LAMMPS_LAMBDA(const member_type& thread) {
+      const int natom = thread.league_rank();
+      parallel_for(Kokkos::TeamThreadRange(thread, idxdu_max_loc),
+                   [&](const int j) {
+                     ylist_loc(natom, j) = { 0.0, 0.0 };
+                   });
+    });
+
+  parallel_for(
+    num_atoms_loc * idxz_max_loc, LAMMPS_LAMBDA(const int iter) {
+      const int natom = iter / idxz_max_loc;
+      const int jjz = iter % idxz_max_loc;
+
+      const int j1 = idxz_loc(jjz, 0);
+      const int j2 = idxz_loc(jjz, 1);
+      const int j = idxz_loc(jjz, 2);
+      const int ma1min = idxz_loc(jjz, 3);
+      const int ma2max = idxz_loc(jjz, 4);
+      const int na = idxz_loc(jjz, 5);
+      const int mb1min = idxz_loc(jjz, 6);
+      const int mb2max = idxz_loc(jjz, 7);
+      const int nb = idxz_loc(jjz, 8);
+
+      const SNADOUBLE betaj = idxzbeta_loc(jjz);
+
+      const SNADOUBLE* cgblock = cglist_loc.data() + idxcg_block_loc(j1, j2, j);
+      int mb = (2 * (mb1min + mb2max) - j1 - j2 + j) / 2;
+      int ma = (2 * (ma1min + ma2max) - j1 - j2 + j) / 2;
+      const int jjdu = idxdu_block_loc(j) + (j + 1) * mb + ma;
+
+      int jju1 = idxu_block_loc(j1) + (j1 + 1) * mb1min;
+      int jju2 = idxu_block_loc(j2) + (j2 + 1) * mb2max;
+      int icgb = mb1min * (j2 + 1) + mb2max;
+
+      SNADOUBLE ztmp_r = 0.0;
+      SNADOUBLE ztmp_i = 0.0;
+
+      // loop over columns of u1 and corresponding
+      // columns of u2 satisfying Clebsch-Gordan constraint
+      //      2*mb-j = 2*mb1-j1 + 2*mb2-j2
+
+      for (int ib = 0; ib < nb; ib++) {
+
+        SNADOUBLE suma1_r = 0.0;
+        SNADOUBLE suma1_i = 0.0;
+
+        int ma1 = ma1min;
+        int ma2 = ma2max;
+        int icga = ma1min * (j2 + 1) + ma2max;
+
+        for (int ia = 0; ia < na; ia++) {
+          suma1_r += cgblock[icga] * (ulisttot_loc(jju1 + ma1, natom).re *
+                                        ulisttot_loc(jju2 + ma2, natom).re -
+                                      ulisttot_loc(jju1 + ma1, natom).im *
+                                        ulisttot_loc(jju2 + ma2, natom).im);
+          suma1_i += cgblock[icga] * (ulisttot_loc(jju1 + ma1, natom).re *
+                                        ulisttot_loc(jju2 + ma2, natom).im +
+                                      ulisttot_loc(jju1 + ma1, natom).im *
+                                        ulisttot_loc(jju2 + ma2, natom).re);
+          ma1++;
+          ma2--;
+          icga += j2;
+        } // end loop over ia
+
+        ztmp_r += cgblock[icgb] * suma1_r;
+        ztmp_i += cgblock[icgb] * suma1_i;
+        jju1 += j1 + 1;
+        jju2 -= j2 + 1;
+        icgb += j2;
+      } // end loop over ib
+
+      // apply z(j1,j2,j,ma,mb) to unique element of y(j)
+
+      //    ylist(natom,jjdu).re += betaj*ztmp_r;
+      //    ylist(natom,jjdu).im += betaj*ztmp_i;
+      Kokkos::atomic_add(&(ylist_loc(natom, jjdu).re), betaj * ztmp_r);
+      Kokkos::atomic_add(&(ylist_loc(natom, jjdu).im), betaj * ztmp_i);
+    }); // end jjz and atom loop
+  Kokkos::fence();
+}
+
+void
+SNA::compute_yi_cpu()
+{
+  auto num_atoms_loc = num_atoms;
+  auto idxz_max_loc = idxz_max;
+  auto idxdu_max_loc = idxdu_max;
+  auto ylist_loc = ylist;
+  auto idxz_loc = idxz;
+  auto idxzbeta_loc = idxzbeta;
+  auto cglist_loc = cglist;
+  auto idxu_block_loc = idxu_block;
+  auto idxdu_block_loc = idxdu_block;
+  auto ulisttot_loc = ulisttot;
   auto idxcg_block_loc = idxcg_block;
   team_policy policy(num_atoms, Kokkos::AUTO);
 
@@ -851,6 +1142,402 @@ SNA::compute_deidrj()
   Kokkos::fence();
 }
 
+#if defined(KOKKOS_ENABLE_CUDA)
+void
+SNA::compute_fused_deidrj()
+{
+  auto num_atoms_loc = num_atoms;
+  auto num_nbor_loc = num_nbor;
+  auto idxu_block_loc = idxu_block;
+  auto idxdu_block_loc = idxdu_block;
+  auto rij_loc = rij;
+  auto rcutij_loc = rcutij;
+  auto rootpqarray_loc = rootpqarray;
+  auto ulist_parity_loc = ulist_parity;
+  auto dulist_loc = dulist;
+  auto switch_flag_loc = switch_flag;
+  auto twojmax_loc = twojmax;
+  auto rootpqparityarray_loc = rootpqparityarray;
+  auto wj_loc = wj;
+  auto rmin0_loc = rmin0;
+  auto MY_PI_loc = MY_PI;
+  auto rfac0_loc = rfac0;
+  auto dedr_loc = dedr;
+  auto ylist_loc = ylist;
+
+  int nTotal = num_atoms_loc * num_nbor_loc;
+
+  int du_team_size = 4;
+  int vector_size = 32;
+  int numBlocks = nTotal / du_team_size + 1;
+  team_policy policy_du(numBlocks, du_team_size, vector_size);
+
+  const int scratch_level = 0;
+
+  // scratch memory views for SNAcomplex
+  using ScratchViewType =
+    View<SNAcomplex*, ExecSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
+  const int PerTeamScratch = (twojmax_loc + 1) * (twojmax_loc / 2 + 1);
+  int scratch_size =
+    ScratchViewType::shmem_size(du_team_size * PerTeamScratch * 4);
+  policy_du = policy_du.set_scratch_size(scratch_level, PerTeam(scratch_size));
+
+  parallel_for(
+    policy_du, LAMMPS_LAMBDA(const member_type team_member) {
+      parallel_for(
+        TeamThreadRange(team_member, du_team_size), [&](const int not_using) {
+          int iter = team_member.league_rank() * team_member.team_size() +
+                     team_member.team_rank();
+          if (iter < nTotal) {
+            int nbor = iter / num_atoms_loc;
+            int natom = iter % num_atoms_loc;
+
+            ScratchViewType buf1(team_member.team_scratch(scratch_level),
+                                 du_team_size * PerTeamScratch);
+
+            ScratchViewType buf2(team_member.team_scratch(scratch_level),
+                                 du_team_size * PerTeamScratch);
+
+            ScratchViewType ubuf1(team_member.team_scratch(scratch_level),
+                                  du_team_size * PerTeamScratch);
+
+            ScratchViewType ubuf2(team_member.team_scratch(scratch_level),
+                                  du_team_size * PerTeamScratch);
+
+            // thread id's and the index for the start of the buffer for
+            // each thread.
+            const int tid = team_member.team_rank();
+            const int tid_index = tid * PerTeamScratch;
+
+            parallel_for(ThreadVectorRange(team_member, PerTeamScratch),
+                         [&](const int i) {
+                           buf1[tid_index + i] = { 0., 0. };
+                           ubuf1[tid_index + i] = { 0., 0. };
+                         });
+
+            buf2[tid_index] = { 0., 0. };
+
+            SNADOUBLE rsq, r, x, y, z, z0, theta0, cs, sn;
+            SNADOUBLE dz0dr;
+
+            x = rij_loc(natom, nbor, 0);
+            y = rij_loc(natom, nbor, 1);
+            z = rij_loc(natom, nbor, 2);
+            rsq = x * x + y * y + z * z;
+            r = sqrt(rsq);
+            SNADOUBLE rscale0 =
+              rfac0_loc * MY_PI_loc / (rcutij_loc(natom, nbor) - rmin0_loc);
+            theta0 = (r - rmin0_loc) * rscale0;
+            cs = cos(theta0);
+            sn = sin(theta0);
+            z0 = r * cs / sn;
+            dz0dr = z0 / r - (r * rscale0) * (rsq + z0 * z0) / rsq;
+            SNADOUBLE r0inv;
+            SNADOUBLE a_r, a_i, b_r, b_i;
+            SNADOUBLE da_r[3], da_i[3], db_r[3], db_i[3];
+            SNADOUBLE dz0[3], dr0inv[3], dr0invdr;
+
+            SNADOUBLE rinv = 1.0 / r;
+
+            SNADOUBLE u[3] = { x * rinv, y * rinv, z * rinv };
+
+            r0inv = 1.0 / sqrt(r * r + z0 * z0);
+            a_r = z0 * r0inv;
+            a_i = -z * r0inv;
+            b_r = y * r0inv;
+            b_i = -x * r0inv;
+            SNADOUBLE sfac = compute_sfac_loc(
+              r, rcutij_loc(natom, nbor), switch_flag_loc, rmin0_loc);
+            SNADOUBLE dsfac = compute_dsfac_loc(
+              r, rcutij_loc(natom, nbor), switch_flag_loc, rmin0_loc);
+
+            sfac *= wj_loc(natom, nbor);
+            dsfac *= wj_loc(natom, nbor);
+
+            dr0invdr = -pow(r0inv, 3.0) * (r + z0 * dz0dr);
+
+            dr0inv[0] = dr0invdr * u[0];
+            dr0inv[1] = dr0invdr * u[1];
+            dr0inv[2] = dr0invdr * u[2];
+
+            dz0[0] = dz0dr * u[0];
+            dz0[1] = dz0dr * u[1];
+            dz0[2] = dz0dr * u[2];
+
+            for (int k = 0; k < 3; k++) {
+              da_r[k] = dz0[k] * r0inv + z0 * dr0inv[k];
+              da_i[k] = -z * dr0inv[k];
+            }
+
+            da_i[2] += -r0inv;
+
+            for (int k = 0; k < 3; k++) {
+              db_r[k] = y * dr0inv[k];
+              db_i[k] = -x * dr0inv[k];
+            }
+
+            db_i[0] += -r0inv;
+            db_r[1] += r0inv;
+            SNADOUBLE dedrTmp;
+
+            // compute ulist values and store it in buf3 for later use
+            for (int k = 0; k < 3; ++k) {
+              dedr_loc(natom, nbor, k) = 0.0;
+
+              buf2[tid_index] = { 0., 0. };
+              ubuf2[tid_index] = { 1.0, 0.0 };
+              for (int j = 1; j <= twojmax_loc; j++) {
+
+                int jju = idxu_block_loc(j);
+                int jjup = idxu_block_loc(j - 1);
+                int jjdu = idxdu_block_loc(j);
+
+                // Collapse ma and mb loops
+                int mb_max = (j + 1) / 2;
+                int ma_max = j;
+                int m_max = mb_max * ma_max;
+
+                // 0 initialization for all ma == 0
+                parallel_for(ThreadVectorRange(team_member, m_max),
+                             [&](const int m_iter) {
+                               // Initialize all jjdu to zeros'
+                               const int mb = m_iter / ma_max;
+                               const int ma = m_iter % ma_max;
+                               int buf1_index = tid_index + (mb * (ma_max + 1));
+                               if (ma == 0)
+                                 buf1[buf1_index] = { 0., 0. };
+                             });
+
+                // fill in left side of matrix layer from previous layer
+
+                // jju+1
+                parallel_for(
+                  ThreadVectorRange(team_member, m_max), [&](const int m_iter) {
+                    const int mb = m_iter / ma_max;
+                    const int ma = m_iter % ma_max;
+
+                    int buf1_index = tid_index + (mb * (ma_max + 1) + ma) + 1;
+                    int buf2_index = tid_index + m_iter;
+
+                    SNADOUBLE rootpq = rootpqarray_loc(ma + 1, j - mb);
+                    ubuf1[buf1_index].re +=
+                      -rootpq *
+                      (b_r * ubuf2[buf2_index].re + b_i * ubuf2[buf2_index].im);
+                    ubuf1[buf1_index].im +=
+                      -rootpq *
+                      (b_r * ubuf2[buf2_index].im - b_i * ubuf2[buf2_index].re);
+
+                    // Assign to jju+1
+                    buf1[buf1_index].re =
+                      -rootpq *
+                      (db_r[k] * ubuf2[buf2_index].re +
+                       db_i[k] * ubuf2[buf2_index].im +
+                       b_r * buf2[buf2_index].re + b_i * buf2[buf2_index].im);
+                    buf1[buf1_index].im =
+                      -rootpq *
+                      (db_r[k] * ubuf2[buf2_index].im -
+                       db_i[k] * ubuf2[buf2_index].re +
+                       b_r * buf2[buf2_index].im - b_i * buf2[buf2_index].re);
+                  });
+
+                // jju
+                parallel_for(
+                  ThreadVectorRange(team_member, m_max), [&](const int m_iter) {
+                    const int mb = m_iter / ma_max;
+                    const int ma = m_iter % ma_max;
+
+                    const int buf1_index = tid_index + mb * (ma_max + 1) + ma;
+                    const int buf2_index = tid_index + m_iter;
+
+                    SNADOUBLE rootpq = rootpqarray_loc(j - ma, j - mb);
+                    ubuf1[buf1_index].re +=
+                      rootpq *
+                      (a_r * ubuf2[buf2_index].re + a_i * ubuf2[buf2_index].im);
+                    ubuf1[buf1_index].im +=
+                      rootpq *
+                      (a_r * ubuf2[buf2_index].im - a_i * ubuf2[buf2_index].re);
+
+                    buf1[buf1_index].re +=
+                      rootpq *
+                      (da_r[k] * ubuf2[buf2_index].re +
+                       da_i[k] * ubuf2[buf2_index].im +
+                       a_r * buf2[buf2_index].re + a_i * buf2[buf2_index].im);
+                    buf1[buf1_index].im +=
+                      rootpq *
+                      (da_r[k] * ubuf2[buf2_index].im -
+                       da_i[k] * ubuf2[buf2_index].re +
+                       a_r * buf2[buf2_index].im - a_i * buf2[buf2_index].re);
+                  });
+
+                // handle middle column using inversion symmetry of previous
+                // layer
+                if (j % 2 == 0) {
+                  jjup += m_max - 1;
+                  jju += mb_max * (ma_max + 1);
+
+                  int mb = j / 2;
+                  int ubuf2_index = tid_index + m_max - 1;
+                  int buf1_index0 = tid_index + (mb_max * (ma_max + 1));
+                  buf1[buf1_index0] = { 0., 0. };
+                  ubuf1[buf1_index0] = { 0.0, 0.0 };
+
+                  parallel_for(
+                    ThreadVectorRange(team_member, j), [&](const int ma) {
+                      int buf1_index = buf1_index0 + ma;
+                      int buf2_index = tid_index + (m_max - ma - 1);
+                      SNADOUBLE rootpq = ulist_parity_loc(jjup - ma) *
+                                       rootpqarray_loc(j - ma, j - mb);
+
+                      ubuf1[buf1_index].re +=
+                        rootpq * (a_r * ubuf2[ubuf2_index - ma].re +
+                                  a_i * -ubuf2[ubuf2_index - ma].im);
+                      ubuf1[buf1_index].im +=
+                        rootpq * (a_r * -ubuf2[ubuf2_index - ma].im -
+                                  a_i * ubuf2[ubuf2_index - ma].re);
+
+                      rootpq = -rootpqparityarray_loc(ma + 1, j - mb);
+                      buf1[buf1_index + 1].re =
+                        -rootpq * (db_r[k] * ubuf2[buf2_index].re +
+                                   db_i[k] * -ubuf2[buf2_index].im +
+                                   b_r * buf2[buf2_index].re +
+                                   b_i * -buf2[buf2_index].im);
+                      buf1[buf1_index + 1].im =
+                        -rootpq * (db_r[k] * -ubuf2[buf2_index].im -
+                                   db_i[k] * ubuf2[buf2_index].re +
+                                   b_r * -buf2[buf2_index].im -
+                                   b_i * buf2[buf2_index].re);
+                    });
+
+                  parallel_for(
+                    ThreadVectorRange(team_member, j), [&](const int ma) {
+                      int buf1_index = buf1_index0 + ma;
+                      int buf2_index = tid_index + (m_max - ma - 1);
+
+                      SNADOUBLE rootpq = ulist_parity_loc(jjup - ma) *
+                                       rootpqarray_loc(ma + 1, j - mb);
+                      ubuf1[buf1_index + 1].re +=
+                        -rootpq * (b_r * ubuf2[ubuf2_index - ma].re +
+                                   b_i * -ubuf2[ubuf2_index - ma].im);
+                      ubuf1[buf1_index + 1].im +=
+                        -rootpq * (b_r * -ubuf2[ubuf2_index - ma].im -
+                                   b_i * ubuf2[ubuf2_index - ma].re);
+
+                      rootpq = rootpqparityarray_loc(j - ma, j - mb);
+                      buf1[buf1_index].re +=
+                        rootpq * (da_r[k] * ubuf2[buf2_index].re +
+                                  da_i[k] * -ubuf2[buf2_index].im +
+                                  a_r * buf2[buf2_index].re +
+                                  a_i * -buf2[buf2_index].im);
+                      buf1[buf1_index].im +=
+                        rootpq * (da_r[k] * -ubuf2[buf2_index].im -
+                                  da_i[k] * ubuf2[buf2_index].re +
+                                  a_r * -buf2[buf2_index].im -
+                                  a_i * buf2[buf2_index].re);
+                    });
+                } // middle loop end
+
+                // Update dedr with the first element of ulist and ylist only
+                // once with j==1 .
+                if (j == 1) {
+
+                  Kokkos::single(Kokkos::PerThread(team_member), [&]() {
+                    dedr_loc(natom, nbor, k) +=
+                      (dsfac * ubuf2[tid_index].re * u[k] *
+                       ylist_loc(natom, 0).re) *
+                      0.5;
+                  });
+                }
+
+                // swap dulist buffers
+                auto tmpu = buf2;
+                buf2 = buf1;
+                auto tmpdu = ubuf2;
+                ubuf2 = ubuf1;
+                buf1 = tmpdu;
+                ubuf1 = tmpu;
+
+                mb_max = j / 2 + 1;
+                ma_max = j + 1;
+                m_max = ma_max * mb_max;
+
+                parallel_for(
+                  ThreadVectorRange(team_member, m_max), [&](const int m_iter) {
+                    const int ubuf_index = tid_index + m_iter;
+                    const int buf_index = tid_index + m_iter;
+
+                    SNAcomplex tmp1(0.0, 0.0);
+
+                    buf1[buf_index].re = dsfac * ubuf2[ubuf_index].re * u[k] +
+                                         sfac * buf2[buf_index].re;
+                    buf1[buf_index].im = dsfac * ubuf2[ubuf_index].im * u[k] +
+                                         sfac * buf2[buf_index].im;
+                  });
+
+                mb_max = (j + 1) / 2;
+                m_max = ma_max * mb_max;
+
+                parallel_reduce(
+                  ThreadVectorRange(team_member, m_max),
+                  [&](const int m_iter, SNADOUBLE& updateDedr) {
+                    const int jjdu_index = jjdu + m_iter;
+                    int buf_index = tid_index + m_iter;
+
+                    updateDedr +=
+                      buf1[buf_index].re * ylist_loc(natom, jjdu_index).re +
+                      buf1[buf_index].im * ylist_loc(natom, jjdu_index).im;
+                  },
+                  dedrTmp); // end loop over ma mb
+
+                dedr_loc(natom, nbor, k) += dedrTmp;
+
+                jjdu += m_max;
+
+                // For j even, handle middle column
+                if (j % 2 == 0) {
+                  int mb = j / 2;
+                  dedrTmp = 0.;
+                  parallel_reduce(
+                    ThreadVectorRange(team_member, mb),
+                    [&](const int ma, SNADOUBLE& updateDedr) {
+                      int jjdu_index = jjdu + ma;
+                      int buf_index = tid_index + m_max + ma;
+                      updateDedr +=
+                        buf1[buf_index].re * ylist_loc(natom, jjdu_index).re +
+                        buf1[buf_index].im * ylist_loc(natom, jjdu_index).im;
+                    },
+                    dedrTmp);
+
+                  jjdu += mb;
+                  int buf_index = tid_index + m_max + mb;
+
+                  Kokkos::single(Kokkos::PerThread(team_member), [&]() {
+                    dedrTmp +=
+                      (buf1[buf_index].re * ylist_loc(natom, jjdu).re +
+                       buf1[buf_index].im * ylist_loc(natom, jjdu).im) *
+                      0.5;
+
+                    dedr_loc(natom, nbor, k) += dedrTmp;
+                  });
+                } // end if jeven
+
+                parallel_for(ThreadVectorRange(team_member, PerTeamScratch),
+                             [&](const int i) {
+                               buf1[tid_index + i] = { 0., 0. };
+                               ubuf1[tid_index + i] = { 0.0, 0.0 };
+                             });
+              } // twojmax
+
+              Kokkos::single(Kokkos::PerThread(team_member),
+                             [&]() { dedr_loc(natom, nbor, k) *= 2.0; });
+            } // k
+          }   // iter
+        });   // TeamThreadRange
+    });       // League
+
+  Kokkos::fence();
+}
+#endif
+
 /* ----------------------------------------------------------------------
    calculate derivative of Ui w.r.t. atom j
 ------------------------------------------------------------------------- */
@@ -863,6 +1550,7 @@ SNA::compute_duidrj()
 
 /* ---------------------------------------------------------------------- */
 
+KOKKOS_INLINE_FUNCTION
 void
 SNA::zero_uarraytot()
 {
@@ -872,6 +1560,16 @@ SNA::zero_uarraytot()
   auto ulist_loc = ulist;
   auto nTotal = num_atoms * num_nbor;
 
+#if defined(KOKKOS_ENABLE_CUDA)
+  parallel_for(
+    num_atoms_loc * idxu_max_loc, LAMMPS_LAMBDA(const int iter) {
+      int natom = iter / idxu_max_loc;
+      int jju = iter % idxu_max_loc;
+      ;
+      ulisttot_loc(jju, natom) = { 0.0, 0.0 };
+    });
+
+#else
   parallel_for(
     num_atoms_loc * idxu_max_loc, LAMMPS_LAMBDA(const int iter) {
       int natom = iter / idxu_max_loc;
@@ -889,11 +1587,12 @@ SNA::zero_uarraytot()
       for (int jju = 1; jju < idxu_max_loc; ++jju)
         ulist_loc(natom, nbor, jju) = { 0.0, 0.0 };
     });
+#endif
 }
 
 /* ---------------------------------------------------------------------- */
 
-// KOKKOS_INLINE_FUNCTION
+KOKKOS_INLINE_FUNCTION
 void
 SNA::addself_uarraytot(double wself_in)
 {
@@ -902,6 +1601,19 @@ SNA::addself_uarraytot(double wself_in)
   auto jdim = twojmax + 1;
   auto num_atoms_loc = num_atoms;
 
+#if defined(KOKKOS_ENABLE_CUDA)
+  parallel_for(
+    num_atoms_loc * jdim, LAMMPS_LAMBDA(const int iter) {
+      int natom = iter / jdim;
+      int j = iter % jdim;
+      ;
+      int jju = idxu_block_loc(j);
+      for (int ma = 0; ma <= j; ma++) {
+        ulisttot_loc(jju, natom) = { wself_in, 0.0 };
+        jju += j + 2;
+      }
+    });
+#else
   parallel_for(
     num_atoms_loc * jdim, LAMMPS_LAMBDA(const int iter) {
       int natom = iter / jdim;
@@ -913,6 +1625,7 @@ SNA::addself_uarraytot(double wself_in)
         jju += j + 2;
       }
     });
+#endif
 }
 
 /* ----------------------------------------------------------------------
@@ -925,7 +1638,6 @@ SNA::add_uarraytot(int natom, int nbor, double r, double wj, double rcut)
   auto idxu_block_loc = idxu_block;
   auto ulisttot_loc = ulisttot;
   auto ulist_loc = ulist;
-  auto ulist_ij_loc = ulist_ij;
 
   double sfac = compute_sfac(r, rcut);
   sfac *= wj;
@@ -936,9 +1648,6 @@ SNA::add_uarraytot(int natom, int nbor, double r, double wj, double rcut)
       for (int ma = 0; ma <= j; ma++) {
         ulisttot_loc(natom, jju).re += sfac * ulist_loc(natom, nbor, jju).re;
         ulisttot_loc(natom, jju).im += sfac * ulist_loc(natom, nbor, jju).im;
-
-        ulist_ij_loc(natom, nbor, jju).re = ulist_loc(natom, nbor, jju).re;
-        ulist_ij_loc(natom, nbor, jju).im = ulist_loc(natom, nbor, jju).im;
 
         jju++;
       }
@@ -960,7 +1669,6 @@ SNA::compute_uarray(int natom,
   auto ulist_loc = ulist;
   auto idxu_block_loc = idxu_block;
   auto rootpqarray_loc = rootpqarray;
-  auto ulist_ij_loc = ulist_ij;
   auto twojmax_loc = twojmax;
 
   // compute Cayley-Klein parameters for unit quaternion
@@ -1183,9 +1891,11 @@ SNA::create_twojmax_arrays()
   rootpqparityarray = double_View2D("rootpqparityarray", jdimpq, jdimpq);
   ylist = SNAcomplex_View2DR("ylist", num_atoms, idxdu_max);
   dulist = SNAcomplex_View4D("dulist", num_atoms, num_nbor, idxdu_max, 3);
+#if defined(KOKKOS_ENABLE_CUDA)
+  ulisttot = SNAcomplex_View2D("ulisttot", idxu_max, num_atoms);
+#else
   ulisttot = SNAcomplex_View2D("ulisttot", num_atoms, idxu_max);
-  ulisttot_r = SNAcomplex_View2DR("ulisttot_r", num_atoms, idxu_max);
-  ulist_ij = SNAcomplex_View3D("ulist_ij", num_atoms, num_nbor, idxu_max);
+#endif
   ulist = SNAcomplex_View3D("ulist", num_atoms, num_nbor, idxu_max);
 
   h_dedr = create_mirror_view(dedr);
