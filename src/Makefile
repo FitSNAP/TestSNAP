@@ -7,6 +7,7 @@ LINK = ${CXX}
 LINKFLAGS =
 
 
+	KOKKOS_CXX_STANDARD=c++17
 ifeq ($(DEVICE),openmp)
 	KOKKOS_DEVICES = "OpenMP"
 	CXX = g++

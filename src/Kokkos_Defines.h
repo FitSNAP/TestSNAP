@@ -29,35 +29,12 @@
 
 #include <Kokkos_Core.hpp>
 
-#if defined(KOKKOS_ENABLE_CUDA)
-#define CUDA_HOSTDEV KOKKOS_INLINE_FUNCTION
-#else
-#define CUDA_HOSTDEV
-#endif
-
-#if defined(KOKKOS_ENABLE_CUDA)
-#define LAMMPS_LAMBDA [=] __device__
-#define DOUBLE2 double2
-#else
-#define LAMMPS_LAMBDA [=]
-#define DOUBLE2                                                                \
-  struct double2                                                               \
-  {                                                                            \
-    double x, y;                                                               \
-  }
-#endif
-
-double
-compute_sfac_loc(double r, double rcut, bool switch_flag, double rmin0);
-double
-compute_dsfac_loc(double r, double rcut, bool switch_flag, double rmin0);
-
 typedef double SNADOUBLE;
 struct alignas(2 * sizeof(SNADOUBLE)) SNAcomplex
 {
   SNADOUBLE re, im;
 
-  CUDA_HOSTDEV
+  KOKKOS_INLINE_FUNCTION
   SNAcomplex()
     : re(0)
     , im(0)
@@ -65,7 +42,7 @@ struct alignas(2 * sizeof(SNADOUBLE)) SNAcomplex
     ;
   }
 
-  CUDA_HOSTDEV
+  KOKKOS_INLINE_FUNCTION
   SNAcomplex(SNADOUBLE real_in, SNADOUBLE imag_in)
     : re(real_in)
     , im(imag_in)
@@ -73,21 +50,21 @@ struct alignas(2 * sizeof(SNADOUBLE)) SNAcomplex
     ;
   }
 
-  CUDA_HOSTDEV
+  KOKKOS_INLINE_FUNCTION
   void operator=(const SNAcomplex src)
   {
     re = src.re;
     im = src.im;
   }
 
-  CUDA_HOSTDEV
+  KOKKOS_INLINE_FUNCTION
   void operator+=(const SNAcomplex src)
   {
     re += src.re;
     im += src.im;
   }
 
-  CUDA_HOSTDEV
+  KOKKOS_INLINE_FUNCTION
   void operator*=(const SNAcomplex src)
   {
     re += src.re;

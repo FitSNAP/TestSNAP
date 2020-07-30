@@ -39,16 +39,6 @@
 #include <stdlib.h>
 #include "Kokkos_Defines.h"
 
-KOKKOS_INLINE_FUNCTION
-double compute_dsfac_loc(double r, double rcut, bool switch_flag, double rmin0);
-struct SNA_ZINDICES {
-  int j1, j2, j, ma1min, ma2max, mb1min, mb2max, na, nb;
-};
-
-struct SNA_BINDICES {
-  int j1, j2, j;
-};
-
 class SNA {
 
 public:
@@ -73,6 +63,9 @@ public:
   void ulisttot_transpose_launch();
   void yi_zero_launch();
   void yi_launch();
+  void compute_duarray();
+  void zero_uarraytot();
+  void addself_uarraytot(double);
 #if defined(KOKKOS_ENABLE_CUDA)
   void compute_fused_deidrj();
 #endif
@@ -143,14 +136,8 @@ public:
   int twojmax = 0;
   int idxz_j1j2j_max = 0, idxz_ma_max = 0, idxz_mb_max = 0;
 
-//private:
+private:
   double rmin0, rfac0;
-
-//  SNA_ZINDICES* idxz;
-
-  // data for bispectrum coefficients
-
-  // derivatives of data
 
   static const int nmaxfactorial = 167;
   static const double nfac_table[];
@@ -160,17 +147,14 @@ public:
   void destroy_twojmax_arrays();
   void init_clebsch_gordan();
   void init_rootpqarray();
-  void zero_uarraytot();
-  void addself_uarraytot(double);
   void add_uarraytot(int natom, int nbor, double r, double wj, double rcut);
   void compute_uarray(int natom, int nbor, double x, double y, double z,
                          double z0, double r);
   double deltacg(int, int, int);
   int compute_ncoeff();
-  void compute_duarray();
   KOKKOS_INLINE_FUNCTION
-  double compute_sfac(double, double);
-  double compute_dsfac(double, double);
+  double compute_sfac(double, double) const;
+  double compute_dsfac(double, double) const;
 
 
   // Sets the style for the switching function
