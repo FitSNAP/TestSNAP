@@ -20,6 +20,11 @@ else ifeq ($(DEVICE),cuda)
 	EXE = ${EXE_NAME}.cuda
 	KOKKOS_ARCH = "Volta70"
 	KOKKOS_CUDA_OPTIONS = "enable_lambda -lineinfo"
+else ifeq ($(DEVICE),hip)
+        KOKKOS_DEVICES = "HIP"
+        CXX = hipcc
+        EXE = ${EXE_NAME}.hip
+        KOKKOS_ARCH = "Vega906"
 else
 	KOKKOS_DEVICES = "Serial"
 	CXX = g++
@@ -48,7 +53,7 @@ $(EXE): $(OBJ) $(KOKKOS_LINK_DEPENDS)
 	$(LINK) $(KOKKOS_LDFLAGS) $(LINKFLAGS) $(EXTRA_PATH) $(OBJ) $(KOKKOS_LIBS) $(LIB) -o $(EXE)
 
 clean: kokkos-clean
-	rm -f *.openmp *.o *.cuda *.host
+	rm -f *.openmp *.o *.cuda *.hip *.host
 
 # Compilation rules
 

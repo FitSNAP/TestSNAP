@@ -1056,7 +1056,7 @@ SNA::compute_deidrj()
   Kokkos::fence();
 }
 
-#if defined(KOKKOS_ENABLE_CUDA)
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
 void
 SNA::compute_fused_deidrj()
 {
@@ -1449,7 +1449,7 @@ KOKKOS_INLINE_FUNCTION
 void
 SNA::zero_uarraytot()
 {
-#if defined(KOKKOS_ENABLE_CUDA)
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
   parallel_for(
     num_atoms * idxu_max, KOKKOS_CLASS_LAMBDA(const int iter) {
       int natom = iter / idxu_max;
@@ -1489,7 +1489,7 @@ SNA::addself_uarraytot(double wself_in)
 {
 
   const int jdim = twojmax+1;
-#if defined(KOKKOS_ENABLE_CUDA)
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
   parallel_for(
     num_atoms * jdim, KOKKOS_CLASS_LAMBDA(const int iter) {
       int natom = iter / jdim;
@@ -1770,7 +1770,7 @@ SNA::create_twojmax_arrays()
   rootpqparityarray = double_View2D("rootpqparityarray", jdimpq, jdimpq);
   ylist = SNAcomplex_View2DR("ylist", num_atoms, idxdu_max);
   dulist = SNAcomplex_View4D("dulist", num_atoms, num_nbor, idxdu_max, 3);
-#if defined(KOKKOS_ENABLE_CUDA)
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
   ulisttot = SNAcomplex_View2D("ulisttot", idxu_max, num_atoms);
 #else
   ulisttot = SNAcomplex_View2D("ulisttot", num_atoms, idxu_max);

@@ -284,7 +284,7 @@ compute()
   deep_copy(snaptr->wj, snaptr->h_wj);
   deep_copy(snaptr->rcutij, snaptr->h_rcutij);
 
-#if defined(KOKKOS_ENABLE_CUDA)
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
   start = system_clock::now();
   snaptr->compute_ui();
   end = system_clock::now();

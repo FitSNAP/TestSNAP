@@ -64,9 +64,11 @@ public:
   void yi_zero_launch();
   void yi_launch();
   void compute_duarray();
+  KOKKOS_INLINE_FUNCTION
   void zero_uarraytot();
+  KOKKOS_INLINE_FUNCTION
   void addself_uarraytot(double);
-#if defined(KOKKOS_ENABLE_CUDA)
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
   void compute_fused_deidrj();
 #endif
 
@@ -147,6 +149,7 @@ private:
   void destroy_twojmax_arrays();
   void init_clebsch_gordan();
   void init_rootpqarray();
+  KOKKOS_INLINE_FUNCTION
   void add_uarraytot(int natom, int nbor, double r, double wj, double rcut);
   void compute_uarray(int natom, int nbor, double x, double y, double z,
                          double z0, double r);
@@ -154,6 +157,7 @@ private:
   int compute_ncoeff();
   KOKKOS_INLINE_FUNCTION
   double compute_sfac(double, double) const;
+  KOKKOS_INLINE_FUNCTION
   double compute_dsfac(double, double) const;
 
 
