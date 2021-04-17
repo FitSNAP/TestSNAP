@@ -54,6 +54,8 @@ using namespace std::chrono;
 static double elapsed_ui = 0.0, elapsed_yi = 0.0, elapsed_duarray = 0.0,
               elapsed_deidrj = 0.0;
 
+using DeviceType = Kokkos::DefaultExecutionSpace;
+
 /* ---------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------
@@ -104,16 +106,6 @@ void inline init_forces() {
 int main(int argc, char* argv[]) {
     Kokkos::initialize(argc, argv);
     {
-#if defined(KOKKOS_ENABLE_OPENMP)
-        cout << "****** OpenMP  execution space ****** " << endl;
-#elif defined(KOKKOS_ENABLE_CUDA)
-        cout << "****** CUDA execution space ****** " << endl;
-#elif defined(KOKKOS_ENABLE_OPENMPTARGET)
-        cout << "****** OpenMPTarget execution space ****** " << endl;
-#else
-        cout << "****** Serial_space execution ****** " << endl;
-#endif
-
         // process command line options
         options(argc, argv);
 
@@ -228,7 +220,6 @@ void init() {
     deep_copy(snaptr->idxcg_block, snaptr->h_idxcg_block);
     deep_copy(snaptr->idxu_block, snaptr->h_idxu_block);
     deep_copy(snaptr->idxz, snaptr->h_idxz);
-    deep_copy(snaptr->betaj_index, snaptr->h_betaj_index);
     deep_copy(snaptr->idxb_block, snaptr->h_idxb_block);
     deep_copy(snaptr->cglist, snaptr->h_cglist);
     deep_copy(snaptr->rootpqarray, snaptr->h_rootpqarray);
@@ -276,6 +267,13 @@ void compute() {
     snaptr->compute_yi();
     elapsed_yi += timer.seconds();
 
+#ifdef KOKKOS_ENABLE_CUDA
+    // compute_deidrj
+    timer.reset();
+    snaptr->compute_fused_deidrj();
+    elapsed_duarray += timer.seconds();
+#else
+
     // compute_duarray
     timer.reset();
     snaptr->compute_duarray();
@@ -285,7 +283,9 @@ void compute() {
     timer.reset();
     snaptr->compute_deidrj();
     elapsed_deidrj += timer.seconds();
+#endif
 
+    // Copy back dedr
     deep_copy(snaptr->h_dedr, snaptr->dedr);
     compute_forces();
 

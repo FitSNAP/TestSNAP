@@ -109,35 +109,6 @@
    "Quantum Theory of Angular Momentum," World Scientific (1988)
 
 ------------------------------------------------------------------------- */
-
-SNA::SNA(double rfac0_in, int twojmax_in, double rmin0_in, int switch_flag_in,
-         int /*bzero_flag_in*/, int natoms, int nnbor) {
-    wself = 1.0;
-
-    rfac0 = rfac0_in;
-    rmin0 = rmin0_in;
-    switch_flag = switch_flag_in;
-    num_atoms = natoms;
-    num_nbor = nnbor;
-    nTotal = num_atoms * num_nbor;
-
-    twojmax = twojmax_in;
-    jdim = twojmax + 1;
-
-    ncoeff = compute_ncoeff();
-
-    nmax = 0;
-
-    grow_rij();
-    create_twojmax_arrays();
-
-    //  build_indexlist();
-}
-
-/* ---------------------------------------------------------------------- */
-
-SNA::~SNA() {}
-
 void SNA::build_indexlist() {
     double *beta = coeffi + 1;
     idxb_block = int_View3D("idxb_block", jdim, jdim, jdim);
@@ -230,76 +201,6 @@ void SNA::grow_rij() {
 }
 
 /* ----------------------------------------------------------------------
-   compute Ui by summing over neighbors j
-------------------------------------------------------------------------- */
-void SNA::compute_ui() {
-    zero_uarraytot();
-    addself_uarraytot();
-
-    int numThreads, numBlocks;
-    numThreads = 32;
-    numBlocks = nTotal / numThreads + 1;
-
-    Kokkos::parallel_for(
-        "ComputeUi", Kokkos::TeamPolicy<ComputeUiTag>(numBlocks, numThreads),
-        *this);
-
-    Kokkos::fence();
-}
-
-/* ----------------------------------------------------------------------
-   compute Yi by
-------------------------------------------------------------------------- */
-void SNA::compute_yi() {
-    Kokkos::parallel_for(
-        "ComputeYiInit",
-        Kokkos::RangePolicy<ComputeYiInitTag>(0, num_atoms * idxdu_max), *this);
-
-    Kokkos::parallel_for(
-        "ComputeYi", Kokkos::RangePolicy<ComputeYiTag>(0, num_atoms * idxz_max),
-        *this);
-
-    Kokkos::fence();
-}
-
-/* ----------------------------------------------------------------------
-  compute_duarray
-------------------------------------------------------------------------- */
-void SNA::compute_duarray() {
-    Kokkos::parallel_for("ComputeDUi",
-                         Kokkos::RangePolicy<ComputeDUiTag>(0, nTotal), *this);
-
-    Kokkos::fence();
-}
-
-/* ----------------------------------------------------------------------
-  compute_deidrj
-------------------------------------------------------------------------- */
-void SNA::compute_deidrj() {
-    Kokkos::parallel_for("ComputeDEi",
-                         Kokkos::RangePolicy<ComputeDEiTag>(0, nTotal), *this);
-    Kokkos::fence();
-}
-
-/* ---------------------------------------------------------------------- */
-void SNA::zero_uarraytot() {
-    Kokkos::parallel_for(
-        "InitUlisttot",
-        Kokkos::RangePolicy<InitUlisttotTag>(0, num_atoms * idxu_max), *this);
-
-    Kokkos::parallel_for("InitUlist",
-                         Kokkos::RangePolicy<InitUlistTag>(0, nTotal), *this);
-}
-
-/* ---------------------------------------------------------------------- */
-
-void SNA::addself_uarraytot() {
-    Kokkos::parallel_for(
-        "AddSelfUarraytot",
-        Kokkos::RangePolicy<AddSelfUarraytotTag>(0, num_atoms * jdim), *this);
-}
-
-/* ----------------------------------------------------------------------
    memory usage of arrays
 ------------------------------------------------------------------------- */
 
@@ -307,21 +208,19 @@ double SNA::memory_usage() {
     size_t bytes;
     bytes = ncoeff * sizeof(double);  // coeff
 
-    bytes += ulist.span() * sizeof(SNAcomplex);       // ulist
-    bytes += cglist.span() * sizeof(double);          // cglist
-    bytes += idxcg_block.span() * sizeof(int);        // idxcg_block
-    bytes += ulisttot.span() * sizeof(SNAcomplex);    // ulisttot
-    bytes += ulisttot_r.span() * sizeof(SNAcomplex);  // ulisttot
-    bytes += dulist.span() * sizeof(SNAcomplex);      // dulist
-    bytes += idxu_block.span() * sizeof(int);         // idxu_block
-    bytes += idxz.span() * sizeof(int);               // idxz
-    bytes += idxz_block.span() * sizeof(int);         // idxz_block
-    bytes += ylist.span() * sizeof(SNAcomplex);       // ylist
-    bytes += dedr.span() * sizeof(double);            // dedr
-    bytes += rootpqarray.span() * sizeof(double);     // rootpqarray
+    bytes += ulist.span() * sizeof(SNAcomplex);     // ulist
+    bytes += cglist.span() * sizeof(double);        // cglist
+    bytes += idxcg_block.span() * sizeof(int);      // idxcg_block
+    bytes += ulisttot.span() * sizeof(SNAcomplex);  // ulisttot
+    bytes += dulist.span() * sizeof(SNAcomplex);    // dulist
+    bytes += idxu_block.span() * sizeof(int);       // idxu_block
+    bytes += idxz.span() * sizeof(int);             // idxz
+    bytes += idxz_block.span() * sizeof(int);       // idxz_block
+    bytes += ylist.span() * sizeof(SNAcomplex);     // ylist
+    bytes += dedr.span() * sizeof(double);          // dedr
+    bytes += rootpqarray.span() * sizeof(double);   // rootpqarray
 
     bytes += rij.span() * sizeof(double);
-    bytes += inside.span() * sizeof(int);
     bytes += wj.span() * sizeof(double);
     bytes += rcutij.span() * sizeof(double);
 
@@ -362,9 +261,6 @@ void SNA::create_twojmax_arrays() {
 
     h_idxz = create_mirror_view(idxz);
     h_idxzbeta = create_mirror_view(idxzbeta);
-
-    betaj_index = double_View1D("betaj_index", idxz_max);
-    h_betaj_index = create_mirror_view(betaj_index);
 
     // Resize B
     int idxb_count = 0;
@@ -430,7 +326,11 @@ void SNA::create_twojmax_arrays() {
     rootpqparityarray = double_View2D("rootpqparityarray", jdimpq, jdimpq);
     ylist = SNAcomplex_View2DR("ylist", num_atoms, idxdu_max);
     dulist = SNAcomplex_View4D("dulist", num_atoms, num_nbor, idxdu_max, 3);
+#ifdef KOKKOS_ENABLE_CUDA
+    ulisttot = SNAcomplex_View2D("ulisttot", idxu_max, num_atoms);
+#else
     ulisttot = SNAcomplex_View2D("ulisttot", num_atoms, idxu_max);
+#endif
     ulist = SNAcomplex_View3D("ulist", num_atoms, num_nbor, idxu_max);
 
     h_dedr = create_mirror_view(dedr);

@@ -113,3 +113,6 @@ using SNAcomplex_View4D = View<SNAcomplex****, Layout, MemSpace>;
 using SNAcomplex_View2DR = View<SNAcomplex**, Kokkos::LayoutRight, MemSpace>;
 using SNAcomplex_View3DR = View<SNAcomplex***, Kokkos::LayoutRight, MemSpace>;
 using SNAcomplex_View4DR = View<SNAcomplex****, Kokkos::LayoutRight, MemSpace>;
+
+// scratch memory views for SNAcomplex
+using ScratchViewType = View<SNAcomplex *, ExecSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
