@@ -35,33 +35,30 @@
 Memory* memory = NULL;
 // MD data
 
-int nnbor; // num neighbors per atom
+int nnbor;  // num neighbors per atom
 int natoms;
-int nghost;     // number of ghost atoms
-int ntotal;     // number of total atoms
-int nsteps = 1; // num of force evaluations
+int nghost;      // number of ghost atoms
+int ntotal;      // number of total atoms
+int nsteps = 1;  // num of force evaluations
 double** f;
-int ncoeff; // number of beta coefficients
+int ncoeff;  // number of beta coefficients
 
 // SNAP data
 
 SNA* snaptr = NULL;
-double rcutfac;         // SNAP parameter, set by refdata
-int twojmax;            // SNAP parameter, set by refdata
-double rfac0 = 0.99363; // SNAP parameter
-double rmin0 = 0.0;     // SNAP parameter
-int switchflag = 1;     // SNAP parameter
-int bzeroflag = 1;      // SNAP parameter
-int quadraticflag = 0;  // SNAP parameter
+double rcutfac;          // SNAP parameter, set by refdata
+int twojmax;             // SNAP parameter, set by refdata
+double rfac0 = 0.99363;  // SNAP parameter
+double rmin0 = 0.0;      // SNAP parameter
+int switchflag = 1;      // SNAP parameter
+int bzeroflag = 1;       // SNAP parameter
+int quadraticflag = 0;   // SNAP parameter
 
 // function declarations
 
-void
-options(int, char*[]);
-void
-init();
-void
-compute();
+void options(int, char*[]);
+void init();
+void compute();
 
 // timer classes
 
@@ -69,8 +66,6 @@ typedef std::chrono::high_resolution_clock myclock;
 typedef std::chrono::duration<float> myduration;
 
 // math stuff
-
-static const double MY_PI = 3.14159265358979323846; // pi
 
 // error tally
 
