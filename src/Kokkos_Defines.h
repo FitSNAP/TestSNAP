@@ -7,8 +7,8 @@
 // BSD License
 //
 // TestSNAP - A prototype for the SNAP force kernel
-// Version 0.0.2
-// Main changes: Y array trick, memory compaction
+// Version 0.0.3
+// Main changes: GPU AoSoA data layout, optimized recursive polynomial evaluation
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
@@ -18,10 +18,10 @@
 // Rahul Gayatri
 // Steve Plimpton
 // Christian Trott
+// Evan Weinberg
 //
 // Collaborators:
 // Stan Moore
-// Evan Weinberg
 // Nick Lubbers
 // Mitch Wood
 //
@@ -72,6 +72,12 @@ struct alignas(2 * sizeof(SNADOUBLE)) SNAcomplex
   }
 };
 
+// Struct used to "unfold" ulisttot on the gpu
+struct alignas(8) FullHalfMap {
+  int idxu_half;
+  int flip_sign; // 0 -> isn't flipped, 1 -> flip sign of imaginary, -1 -> flip sign of real
+};
+
 using ExecSpace = Kokkos::DefaultExecutionSpace;
 using HostExecSpace = Kokkos::DefaultHostExecutionSpace;
 using Layout = ExecSpace::array_layout;
@@ -101,6 +107,11 @@ using HostInt_View2DR = int_View2DR::HostMirror;
 using double_View1D = View<double*, Layout, MemSpace>;
 using double_View2D = View<double**, Layout, MemSpace>;
 using double_View3D = View<double***, Layout, MemSpace>;
+using double_View1DL = View<double*, Kokkos::LayoutLeft, MemSpace>;
+using double_View2DL = View<double**, Kokkos::LayoutLeft, MemSpace>;
+using double_View3DL = View<double***, Kokkos::LayoutLeft, MemSpace>;
+using double_View4DL = View<double****, Kokkos::LayoutLeft, MemSpace>;
+
 // Host-View mirrors for double's
 using HostDouble_View1D = double_View1D::HostMirror;
 using HostDouble_View2D = double_View2D::HostMirror;
@@ -113,6 +124,15 @@ using SNAcomplex_View4D = View<SNAcomplex****, Layout, MemSpace>;
 using SNAcomplex_View2DR = View<SNAcomplex**, Kokkos::LayoutRight, MemSpace>;
 using SNAcomplex_View3DR = View<SNAcomplex***, Kokkos::LayoutRight, MemSpace>;
 using SNAcomplex_View4DR = View<SNAcomplex****, Kokkos::LayoutRight, MemSpace>;
+using SNAcomplex_View2DL = View<SNAcomplex**, Kokkos::LayoutLeft, MemSpace>;
+using SNAcomplex_View3DL = View<SNAcomplex***, Kokkos::LayoutLeft, MemSpace>;
+using SNAcomplex_View4DL = View<SNAcomplex****, Kokkos::LayoutLeft, MemSpace>;
+
+// 1D view for mapping from compressed ulisttot -> full
+using FullHalfMap_View1D = View<FullHalfMap*, Layout, MemSpace>;
+
+// Host-View mirrors
+using HostFullHalfMap_View1D = FullHalfMap_View1D::HostMirror;
 
 // scratch memory views for SNAcomplex
 using ScratchViewType = View<SNAcomplex *, ExecSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;

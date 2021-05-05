@@ -18,6 +18,7 @@ _Copyright (2019) Sandia Corporation. Under the terms of Contract DE-AC04-94AL85
     Stan Moore (Sandia National Labs)
     Steve Plimpton (Sandia National Labs)
     Christian Trott (Sandia National Labs)
+    Evan Weinberg (NVIDIA)
 
 ## Build system
 ### CMake

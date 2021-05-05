@@ -1,27 +1,27 @@
 // ----------------------------------------------------------------------
-// Copyright (2019) Sandia Corporation. 
-// Under the terms of Contract DE-AC04-94AL85000 
-// with Sandia Corporation, the U.S. Government 
-// retains certain rights in this software. This 
-// software is distributed under the Zero Clause 
+// Copyright (2019) Sandia Corporation.
+// Under the terms of Contract DE-AC04-94AL85000
+// with Sandia Corporation, the U.S. Government
+// retains certain rights in this software. This
+// software is distributed under the Zero Clause
 // BSD License
 //
 // TestSNAP - A prototype for the SNAP force kernel
-// Version 0.0.2
-// Main changes: Y array trick, memory compaction 
+// Version 0.0.3
+// Main changes: GPU AoSoA data layout, optimized recursive polynomial evaluation
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
 //
-// Additional authors: 
+// Additional authors:
 // Sarah Anderson
 // Rahul Gayatri
 // Steve Plimpton
 // Christian Trott
+// Evan Weinberg
 //
 // Collaborators:
 // Stan Moore
-// Evan Weinberg
 // Nick Lubbers
 // Mitch Wood
 //

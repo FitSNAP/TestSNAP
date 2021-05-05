@@ -7,8 +7,8 @@
 // BSD License
 //
 // TestSNAP - A prototype for the SNAP force kernel
-// Version 0.0.2
-// Main changes: Y array trick, memory compaction
+// Version 0.0.3
+// Main changes: GPU AoSoA data layout, optimized recursive polynomial evaluation
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
@@ -18,10 +18,10 @@
 // Rahul Gayatri
 // Steve Plimpton
 // Christian Trott
+// Evan Weinberg
 //
 // Collaborators:
 // Stan Moore
-// Evan Weinberg
 // Nick Lubbers
 // Mitch Wood
 //
@@ -51,7 +51,7 @@ using namespace std::chrono;
 /* ----------------------------------------------------------------------
   Vars to record timings of individual routines
 ------------------------------------------------------------------------- */
-static double elapsed_ui = 0.0, elapsed_yi = 0.0, elapsed_duarray = 0.0,
+static double elapsed_ck = 0.0, elapsed_ui = 0.0, elapsed_yi = 0.0, elapsed_duarray = 0.0,
               elapsed_deidrj = 0.0;
 
 using DeviceType = Kokkos::DefaultExecutionSpace;
@@ -142,6 +142,7 @@ int main(int argc, char* argv[]) {
                sqrt(sumsqferr / (ntotal * nsteps)));
 
         printf("\n Individual routine timings\n");
+        printf("compute_ck = %f\n", elapsed_ck);
         printf("compute_ui = %f\n", elapsed_ui);
         printf("compute_yi = %f\n", elapsed_yi);
         printf("compute_duarray = %f\n", elapsed_duarray);
@@ -219,6 +220,8 @@ void init() {
     // Deep copies from host to device
     deep_copy(snaptr->idxcg_block, snaptr->h_idxcg_block);
     deep_copy(snaptr->idxu_block, snaptr->h_idxu_block);
+    deep_copy(snaptr->idxu_half_block, snaptr->h_idxu_half_block);
+    deep_copy(snaptr->idxu_full_half, snaptr->h_idxu_full_half);
     deep_copy(snaptr->idxz, snaptr->h_idxz);
     deep_copy(snaptr->idxb_block, snaptr->h_idxb_block);
     deep_copy(snaptr->cglist, snaptr->h_cglist);
@@ -257,8 +260,31 @@ void compute() {
     deep_copy(snaptr->wj, snaptr->h_wj);
     deep_copy(snaptr->rcutij, snaptr->h_rcutij);
 
-    // compute_ui
     Kokkos::Timer timer;
+
+#ifdef KOKKOS_ENABLE_CUDA
+
+    // compute_cayley_klein
+    snaptr->compute_cayley_klein_gpu();
+    elapsed_ck += timer.seconds();
+
+    // compute_ui
+    snaptr->compute_ui_gpu();
+    elapsed_ui += timer.seconds();
+
+    // compute_yi
+    timer.reset();
+    snaptr->compute_yi_gpu();
+    elapsed_yi += timer.seconds();
+
+    // compute_fused_deidrj
+    timer.reset();
+    snaptr->compute_fused_deidrj_gpu();
+    elapsed_duarray += timer.seconds();
+
+#else
+
+    // compute_ui
     snaptr->compute_ui();
     elapsed_ui += timer.seconds();
 
@@ -266,13 +292,6 @@ void compute() {
     timer.reset();
     snaptr->compute_yi();
     elapsed_yi += timer.seconds();
-
-#ifdef KOKKOS_ENABLE_CUDA
-    // compute_deidrj
-    timer.reset();
-    snaptr->compute_fused_deidrj();
-    elapsed_duarray += timer.seconds();
-#else
 
     // compute_duarray
     timer.reset();

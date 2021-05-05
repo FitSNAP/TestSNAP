@@ -7,8 +7,8 @@
 // BSD License
 //
 // TestSNAP - A prototype for the SNAP force kernel
-// Version 0.0.2
-// Main changes: Y array trick, memory compaction
+// Version 0.0.3
+// Main changes: GPU AoSoA data layout, optimized recursive polynomial evaluation
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
@@ -18,10 +18,10 @@
 // Rahul Gayatri
 // Steve Plimpton
 // Christian Trott
+// Evan Weinberg
 //
 // Collaborators:
 // Stan Moore
-// Evan Weinberg
 // Nick Lubbers
 // Mitch Wood
 //
@@ -235,8 +235,10 @@ void SNA::create_twojmax_arrays() {
     // Building index lists-counts for resizing
     idxcg_block = int_View3D("idxcg_block", jdim, jdim, jdim);
     idxu_block = int_View1D("idxu_block", jdim);
+    idxu_half_block = int_View1D("idxu_half_block", jdim);
     h_idxcg_block = create_mirror_view(idxcg_block);
     h_idxu_block = create_mirror_view(idxu_block);
+    h_idxu_half_block = create_mirror_view(idxu_half_block);
 
     // Resize z-list
     int idxz_count = 0;
@@ -290,6 +292,38 @@ void SNA::create_twojmax_arrays() {
     }
     idxu_max = idxu_count;
 
+    // index list for uarray, compressed
+    int idxu_half_count = 0;
+    for (int j = 0; j <= twojmax; j++) {
+        h_idxu_half_block(j) = idxu_half_count;
+        for (int mb = 0; 2*mb <= j; mb++)
+            for (int ma = 0; ma <= j; ma++) idxu_half_count++;
+    }
+    idxu_half_max = idxu_half_count;
+
+    // mapping from full -> half indexing, encoding sign flips
+    idxu_full_half = FullHalfMap_View1D("idxu_full_half", idxu_max);
+    h_idxu_full_half = create_mirror_view(idxu_full_half);
+    idxu_count = 0;
+    for (int j = 0; j <= twojmax; j++) {
+      int jju_half = h_idxu_half_block[j];
+      for (int mb = 0; mb <= j; mb++) {
+        for (int ma = 0; ma <= j; ma++) {
+          FullHalfMap map;
+          if (2*mb <= j) {
+            map.idxu_half = jju_half + mb * (j + 1) + ma;
+            map.flip_sign = 0;
+          } else {
+            map.idxu_half = jju_half + (j + 1 - mb) * (j + 1) - (ma + 1);
+            map.flip_sign = (((ma+mb)%2==0)?1:-1);
+          }
+          h_idxu_full_half[idxu_count] = map;
+          idxu_count++;
+        }
+      }
+    }
+
+
     // Ulist parity data structure resizing
     ulist_parity = int_View1D("ulist_parity", idxu_max);
     h_ulist_parity = create_mirror_view(ulist_parity);
@@ -324,14 +358,28 @@ void SNA::create_twojmax_arrays() {
     rootpqarray = double_View2D("rootpqarray", jdimpq, jdimpq);
     dedr = double_View3D("dedr", num_atoms, num_nbor, 3);
     rootpqparityarray = double_View2D("rootpqparityarray", jdimpq, jdimpq);
+#ifdef KOKKOS_ENABLE_CUDA
+    alist_gpu = SNAcomplex_View3DL("alist_gpu",vector_length, num_nbor, num_atoms_div);
+    blist_gpu = SNAcomplex_View3DL("blist_gpu",vector_length, num_nbor, num_atoms_div);
+    dalist_gpu = SNAcomplex_View4DL("dalist_gpu",vector_length, num_nbor, num_atoms_div, 3);
+    dblist_gpu = SNAcomplex_View4DL("dblist_gpu", vector_length, num_nbor, num_atoms_div, 3);
+    sfaclist_gpu = double_View4DL("sfaclist_gpu",vector_length, num_nbor, num_atoms_div, 4);
+
+    ulisttot_re_gpu = double_View3DL("ulisttot_re_gpu",vector_length, idxu_half_max, num_atoms_div);
+    ulisttot_im_gpu = double_View3DL("ulisttot_im_gpu",vector_length, idxu_half_max, num_atoms_div);
+    ulisttot_gpu = SNAcomplex_View3DL("ulisttot_gpu",vector_length, idxu_max, num_atoms_div);
+
+    ylist_re_gpu = double_View3DL("ylist_re_gpu",vector_length, idxu_half_max, num_atoms_div);
+    ylist_im_gpu = double_View3DL("ylist_im_gpu",vector_length, idxu_half_max, num_atoms_div);
+
+#else
     ylist = SNAcomplex_View2DR("ylist", num_atoms, idxdu_max);
     dulist = SNAcomplex_View4D("dulist", num_atoms, num_nbor, idxdu_max, 3);
-#ifdef KOKKOS_ENABLE_CUDA
-    ulisttot = SNAcomplex_View2D("ulisttot", idxu_max, num_atoms);
-#else
     ulisttot = SNAcomplex_View2D("ulisttot", num_atoms, idxu_max);
-#endif
     ulist = SNAcomplex_View3D("ulist", num_atoms, num_nbor, idxu_max);
+
+#endif
+    
 
     h_dedr = create_mirror_view(dedr);
     h_cglist = create_mirror_view(cglist);
