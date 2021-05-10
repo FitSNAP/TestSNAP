@@ -52,7 +52,7 @@ using namespace std::chrono;
   Vars to record timings of individual routines
 ------------------------------------------------------------------------- */
 static double elapsed_ck = 0.0, elapsed_ui = 0.0, elapsed_yi = 0.0, elapsed_duarray = 0.0,
-              elapsed_deidrj = 0.0;
+              elapsed_deidrj = 0.0, elapsed_compute = 0.0;
 
 using DeviceType = Kokkos::DefaultExecutionSpace;
 
@@ -134,10 +134,11 @@ int main(int argc, char* argv[]) {
         printf("nsteps = %d \n", nsteps);
         printf("nneighs = %d \n", nnbor);
         printf("twojmax = %d \n", twojmax);
-        printf("duration = %g [sec]\n", elapsed.count());
-        printf("step time = %g [sec/step]\n", elapsed.count() / nsteps);
+        printf("computation time including copies = %g [sec]\n", elapsed.count());
+        printf("duration = %g [sec]\n", elapsed_compute);
+        printf("step time = %g [sec/step]\n", elapsed_compute / nsteps);
         printf("grind time = %g [msec/atom-step]\n",
-               1000.0 * elapsed.count() / (natoms * nsteps));
+               1000.0 * elapsed_compute / (natoms * nsteps));
         printf("RMS |Fj| deviation %g [eV/A]\n",
                sqrt(sumsqferr / (ntotal * nsteps)));
 
@@ -260,6 +261,10 @@ void compute() {
     deep_copy(snaptr->wj, snaptr->h_wj);
     deep_copy(snaptr->rcutij, snaptr->h_rcutij);
 
+    Kokkos::fence();
+
+    Kokkos::Timer overall;
+
     Kokkos::Timer timer;
 
 #if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
@@ -303,6 +308,10 @@ void compute() {
     snaptr->compute_deidrj();
     elapsed_deidrj += timer.seconds();
 #endif
+
+    Kokkos::fence();
+
+    elapsed_compute += overall.seconds();
 
     // Copy back dedr
     deep_copy(snaptr->h_dedr, snaptr->dedr);
