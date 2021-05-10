@@ -262,7 +262,7 @@ void compute() {
 
     Kokkos::Timer timer;
 
-#ifdef KOKKOS_ENABLE_CUDA
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
 
     // compute_cayley_klein
     snaptr->compute_cayley_klein_gpu();

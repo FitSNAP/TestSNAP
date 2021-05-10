@@ -358,7 +358,7 @@ void SNA::create_twojmax_arrays() {
     rootpqarray = double_View2D("rootpqarray", jdimpq, jdimpq);
     dedr = double_View3D("dedr", num_atoms, num_nbor, 3);
     rootpqparityarray = double_View2D("rootpqparityarray", jdimpq, jdimpq);
-#ifdef KOKKOS_ENABLE_CUDA
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
     alist_gpu = SNAcomplex_View3DL("alist_gpu",vector_length, num_nbor, num_atoms_div);
     blist_gpu = SNAcomplex_View3DL("blist_gpu",vector_length, num_nbor, num_atoms_div);
     dalist_gpu = SNAcomplex_View4DL("dalist_gpu",vector_length, num_nbor, num_atoms_div, 3);
@@ -379,7 +379,7 @@ void SNA::create_twojmax_arrays() {
     ulist = SNAcomplex_View3D("ulist", num_atoms, num_nbor, idxu_max);
 
 #endif
-    
+
 
     h_dedr = create_mirror_view(dedr);
     h_cglist = create_mirror_view(cglist);

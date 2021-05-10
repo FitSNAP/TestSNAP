@@ -67,7 +67,7 @@ struct ComputeFusedDeiDrjTagGPU{};
 class SNA {
 
     // Modify as appropriate
-#ifdef KOKKOS_ENABLE_CUDA
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
     static constexpr int vector_length = 32;
 #else
     static constexpr int vector_length = 1;
@@ -468,7 +468,7 @@ class SNA {
             int icga = ma1min * (j2 + 1) + ma2max;
 
             for (int ia = 0; ia < na; ia++) {
-#ifdef KOKKOS_ENABLE_CUDA
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
                 suma1_r += cgblock[icga] * (ulisttot(jju1 + ma1, natom).re *
                                                 ulisttot(jju2 + ma2, natom).re -
                                             ulisttot(jju1 + ma1, natom).im *
@@ -773,7 +773,7 @@ class SNA {
 
         SNADOUBLE rscale0 =
             rfac0 * MY_PI / (rcutij(natom, nbor) - rmin0);
-        
+
         theta0 = (r - rmin0) * rscale0;
         cs = cos(theta0);
         sn = sin(theta0);
@@ -1181,7 +1181,7 @@ class SNA {
                 int ma;
                 for (ma = 0; ma < j; ma++) {
                     // grab y_local; never a need to rescale here
-                    const SNAcomplex ylist_value = SNAcomplex(ylist_re_gpu(natom_mod, jjup + ma, natom_div), 
+                    const SNAcomplex ylist_value = SNAcomplex(ylist_re_gpu(natom_mod, jjup + ma, natom_div),
                                                         ylist_im_gpu(natom_mod, jjup + ma, natom_div));
 
                     // grab value from previous level
@@ -1345,7 +1345,7 @@ class SNA {
        compute Ui by summing over neighbors j
     ------------------------------------------------------------------------- */
     void compute_ui_gpu() {
-        
+
         {
             using Policy3D = Kokkos::MDRangePolicy<Kokkos::IndexType<int>, Kokkos::Rank<3, Kokkos::Iterate::Left, Kokkos::Iterate::Left>, PreUiTagGPU>;
             int jvalues_per_tile = 4;
@@ -1396,7 +1396,7 @@ class SNA {
 
         Kokkos::fence();
 
- 
+
     }
 
     /* ----------------------------------------------------------------------
