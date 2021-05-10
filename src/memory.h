@@ -636,10 +636,10 @@ public:
     return array;
   }
 
-  template <typename TYPE>
-  TYPE *******create(TYPE *******&array, int n1, int n2, int n3, int n4,
-                     int n5, int n6, const char *name)
-  {fail(name); return nullptr;}
+//  template <typename TYPE>
+//  TYPE *******create(TYPE *******&array, int n1, int n2, int n3, int n4,
+//                     int n5, int n6, const char *name)
+//  {fail(name); return nullptr;}
 
 /* ----------------------------------------------------------------------
    destroy a 6d array
