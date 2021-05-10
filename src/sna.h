@@ -195,8 +195,8 @@ class SNA {
     double_View3DL ulisttot_im_gpu = double_View3DL("ulisttot_im_gpu", 0, 0, 0); // compressed data layout
     SNAcomplex_View3DL ulisttot_gpu = SNAcomplex_View3DL("ulisttot_gpu", 0, 0, 0); // compressed data layout
 
-    double_View3DL ylist_re_gpu = double_View3DL("ylist_re_gpu", 0, 0, 0);; // compressed data layout
-    double_View3DL ylist_im_gpu = double_View3DL("ylist_im_gpu", 0, 0, 0);; // compressed data layout
+    double_View3DL ylist_re_gpu = double_View3DL("ylist_re_gpu", 0, 0, 0); // compressed data layout
+    double_View3DL ylist_im_gpu = double_View3DL("ylist_im_gpu", 0, 0, 0); // compressed data layout
 
     void grow_rij();
     int twojmax = 0, jdim = 0;
@@ -669,7 +669,6 @@ class SNA {
             }  // middle column
         }      // twojmax
 
-        double rcut = rcutij(natom, nbor);
         SNADOUBLE sfac = compute_sfac(r, rcutij(natom, nbor));
         SNADOUBLE dsfac = compute_dsfac(r, rcutij(natom, nbor));
 
@@ -1436,6 +1435,7 @@ class SNA {
             Kokkos::parallel_for("ComputeFusedDeiDrjGPU<2>", policy_fused_deidrj, *this);
         }
 
+        Kokkos::fence();
     }
 };
 
