@@ -883,7 +883,7 @@ class SNA {
         if (nbor >= num_nbor) return;
 
         const int PerTeamScratch = vector_length * (twojmax + 1);
-        ScratchViewType ulist(team_member.team_scratch(0), team_member.team_size() * PerTeamScratch);
+        ScratchViewType ulist_scratch(team_member.team_scratch(0), team_member.team_size() * PerTeamScratch);
 
         // thread id's and the index for the start of the buffer
         // for each thread.
@@ -900,7 +900,7 @@ class SNA {
             const SNADOUBLE sfac = sfaclist_gpu(natom_mod, nbor, natom_div, 0);
 
             // initialize with 1
-            ulist[tid_index + natom_mod] = {1., 0.};
+            ulist_scratch[tid_index + natom_mod] = {1., 0.};
 
             // build up row 0 of the Wigner U matrices, this is redundant work
             for (int j = 1; j <= jbend; j++) {
@@ -910,7 +910,7 @@ class SNA {
                 int ma;
                 for (ma = 0; ma < j; ma++) {
                     // grab value from previous level
-                    const SNAcomplex ulist_prev = ulist[tid_index + ma * vector_length + natom_mod];
+                    const SNAcomplex ulist_prev = ulist_scratch[tid_index + ma * vector_length + natom_mod];
 
                     // ulist_tmp += rootpq * a.conj * ulist_prev
                     SNADOUBLE rootpq = rootpqarray(j - ma, j); // mb = 0
@@ -918,7 +918,7 @@ class SNA {
                     ulist_tmp.im += rootpq * (a.re * ulist_prev.im - a.im * ulist_prev.re);
 
                     // store ulist tmp for the next level
-                    ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
 
                     // compute next value
                     // ulist_tmp = -rootpq * b.conj() * ulist_prev
@@ -929,7 +929,7 @@ class SNA {
 
                 // store final ulist_tmp for the next level
 
-                ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
             }
 
             // unique work for each jbend location
@@ -947,7 +947,7 @@ class SNA {
                 int ma;
                 for (ma = 0; ma < j; ma++) {
                     // grab value from previous level
-                    const SNAcomplex ulist_prev = ulist[tid_index + ma * vector_length + natom_mod];
+                    const SNAcomplex ulist_prev = ulist_scratch[tid_index + ma * vector_length + natom_mod];
 
                     // atomic add previous level into ulisttot
                     Kokkos::atomic_add(&(ulisttot_re_gpu(natom_mod, jjup + ma, natom_div)), ulist_prev.re * sfac);
@@ -960,7 +960,7 @@ class SNA {
                     ulist_tmp.im += rootpq * (b.re * ulist_prev.im + b.im * ulist_prev.re);
 
                     // store ulist tmp for the next level
-                    ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
 
                     // compute next value
                     // ulist_tmp = rootpq * a * ulist_prev
@@ -970,7 +970,7 @@ class SNA {
                 }
 
                 // store final ulist_tmp for the next level
-                ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
 
                 mb++;
             }
@@ -978,7 +978,7 @@ class SNA {
             // atomic add last set of values into ulisttot
             const int jjup = idxu_half_block(j-1) + (mb - 1) * j;
             for (int ma = 0; ma < j; ma++) {
-                const SNAcomplex ulist_prev = ulist[tid_index + ma * vector_length + natom_mod];
+                const SNAcomplex ulist_prev = ulist_scratch[tid_index + ma * vector_length + natom_mod];
                 Kokkos::atomic_add(&(ulisttot_re_gpu(natom_mod, jjup + ma, natom_div)), ulist_prev.re * sfac);
                 Kokkos::atomic_add(&(ulisttot_im_gpu(natom_mod, jjup + ma, natom_div)), ulist_prev.im * sfac);
             }
@@ -1096,8 +1096,8 @@ class SNA {
 
         // caching buffers for ulist, dulist
         const int PerTeamScratch = vector_length * (twojmax + 1);
-        ScratchViewType ulist(team_member.team_scratch(0), team_member.team_size() * PerTeamScratch);
-        ScratchViewType dulist(team_member.team_scratch(0), team_member.team_size() * PerTeamScratch);
+        ScratchViewType ulist_scratch(team_member.team_scratch(0), team_member.team_size() * PerTeamScratch);
+        ScratchViewType dulist_scratch(team_member.team_scratch(0), team_member.team_size() * PerTeamScratch);
 
         // thread id's and the index for the start of the buffer
         // for each thread.
@@ -1120,8 +1120,8 @@ class SNA {
             SNADOUBLE dedr_sum = 0.;
 
             // initialize with 1, 0, respectively
-            ulist[tid_index + natom_mod] = {1., 0.};
-            dulist[tid_index + natom_mod] = {0., 0.};
+            ulist_scratch[tid_index + natom_mod] = {1., 0.};
+            dulist_scratch[tid_index + natom_mod] = {0., 0.};
 
             // build up row 0 of the Wigner U matrices and derivative, this is redundant work
             for (int j = 1; j <= jbend; j++) {
@@ -1132,8 +1132,8 @@ class SNA {
                 int ma;
                 for (ma = 0; ma < j; ma++) {
                     // grab value from previous level
-                    const SNAcomplex ulist_prev = ulist[tid_index + ma * vector_length + natom_mod];
-                    const SNAcomplex dulist_prev = dulist[tid_index + ma * vector_length + natom_mod];
+                    const SNAcomplex ulist_prev = ulist_scratch[tid_index + ma * vector_length + natom_mod];
+                    const SNAcomplex dulist_prev = dulist_scratch[tid_index + ma * vector_length + natom_mod];
 
                     // ulist_tmp += rootpq * a.conj * ulist_prev
                     SNADOUBLE rootpq = rootpqarray(j - ma, j); // mb = 0
@@ -1145,8 +1145,8 @@ class SNA {
                     dulist_tmp.im += rootpq * (da.re * ulist_prev.im - da.im * ulist_prev.re + a.re * dulist_prev.im - a.im * dulist_prev.re);
 
                     // store ulist, dulist tmp for the next level
-                    ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
-                    dulist[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                    dulist_scratch[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
 
                     // compute next value
                     // ulist_tmp = -rootpq * b.conj() * ulist_prev
@@ -1161,8 +1161,8 @@ class SNA {
                 }
 
                 // store final ulist_tmp, dulist_tmp for the next level
-                ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
-                dulist[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
+                ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                dulist_scratch[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
             }
 
             // unique work for each jbend location
@@ -1185,8 +1185,8 @@ class SNA {
                                                         ylist_im_gpu(natom_mod, jjup + ma, natom_div));
 
                     // grab value from previous level
-                    const SNAcomplex ulist_prev = ulist[tid_index + ma * vector_length + natom_mod];
-                    const SNAcomplex dulist_prev = dulist[tid_index + ma * vector_length + natom_mod];
+                    const SNAcomplex ulist_prev = ulist_scratch[tid_index + ma * vector_length + natom_mod];
+                    const SNAcomplex dulist_prev = dulist_scratch[tid_index + ma * vector_length + natom_mod];
 
                     // compute next level of U matrices
                     // ulist_tmp += rootpq * b * ulist_prev
@@ -1199,8 +1199,8 @@ class SNA {
                     dulist_tmp.im += rootpq * (db.re * ulist_prev.im + db.im * ulist_prev.re + b.re * dulist_prev.im + b.im * dulist_prev.re);
 
                     // store ulist tmp for the next level
-                    ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
-                    dulist[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                    dulist_scratch[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
 
                     // accumulate dedr
                     const SNAcomplex du_product = { dsfacu * ulist_prev.re + sfac * dulist_prev.re,
@@ -1220,8 +1220,8 @@ class SNA {
                 }
 
                 // store final ulist_tmp for the next level
-                ulist[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
-                dulist[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
+                ulist_scratch[tid_index + ma * vector_length + natom_mod] = ulist_tmp;
+                dulist_scratch[tid_index + ma * vector_length + natom_mod] = dulist_tmp;
 
                 mb++;
             }
@@ -1238,8 +1238,8 @@ class SNA {
                     // else the ma < mb gets "double counted", cancelling the 0.5.
                 }
 
-                const SNAcomplex ulist_prev = ulist[tid_index + ma * vector_length + natom_mod];
-                const SNAcomplex dulist_prev = dulist[tid_index + ma * vector_length + natom_mod];
+                const SNAcomplex ulist_prev = ulist_scratch[tid_index + ma * vector_length + natom_mod];
+                const SNAcomplex dulist_prev = dulist_scratch[tid_index + ma * vector_length + natom_mod];
 
                 // Directly accumulate deidrj
                 const SNAcomplex du_product = { dsfacu * ulist_prev.re + sfac * dulist_prev.re,
