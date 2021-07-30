@@ -8,7 +8,8 @@
 //
 // TestSNAP - A prototype for the SNAP force kernel
 // Version 0.0.3
-// Main changes: GPU AoSoA data layout, optimized recursive polynomial evaluation
+// Main changes: GPU AoSoA data layout, optimized recursive polynomial
+// evaluation
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
@@ -51,8 +52,9 @@ using namespace std::chrono;
 /* ----------------------------------------------------------------------
   Vars to record timings of individual routines
 ------------------------------------------------------------------------- */
-static double elapsed_ck = 0.0, elapsed_ui = 0.0, elapsed_yi = 0.0, elapsed_duarray = 0.0,
-              elapsed_deidrj = 0.0, elapsed_compute = 0.0;
+static double elapsed_ck = 0.0, elapsed_ui = 0.0, elapsed_yi = 0.0,
+              elapsed_duarray = 0.0, elapsed_deidrj = 0.0,
+              elapsed_compute = 0.0;
 
 using DeviceType = Kokkos::DefaultExecutionSpace;
 
@@ -106,6 +108,7 @@ void inline init_forces() {
 int main(int argc, char* argv[]) {
     Kokkos::initialize(argc, argv);
     {
+        printf("Kokkos::ExecutionSpace = %s\n", typeid(ExecSpace).name());
         // process command line options
         options(argc, argv);
 
@@ -134,7 +137,8 @@ int main(int argc, char* argv[]) {
         printf("nsteps = %d \n", nsteps);
         printf("nneighs = %d \n", nnbor);
         printf("twojmax = %d \n", twojmax);
-        printf("computation time including copies = %g [sec]\n", elapsed.count());
+        printf("computation time including copies = %g [sec]\n",
+               elapsed.count());
         printf("duration = %g [sec]\n", elapsed_compute);
         printf("step time = %g [sec/step]\n", elapsed_compute / nsteps);
         printf("grind time = %g [msec/atom-step]\n",
@@ -267,7 +271,8 @@ void compute() {
 
     Kokkos::Timer timer;
 
-#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) || \
+    defined(KOKKOS_ENABLE_SYCL)
 
     // compute_cayley_klein
     snaptr->compute_cayley_klein_gpu();

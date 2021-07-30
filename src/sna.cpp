@@ -8,7 +8,8 @@
 //
 // TestSNAP - A prototype for the SNAP force kernel
 // Version 0.0.3
-// Main changes: GPU AoSoA data layout, optimized recursive polynomial evaluation
+// Main changes: GPU AoSoA data layout, optimized recursive polynomial
+// evaluation
 //
 // Original author: Aidan P. Thompson, athomps@sandia.gov
 // http://www.cs.sandia.gov/~athomps, Sandia National Laboratories
@@ -296,7 +297,7 @@ void SNA::create_twojmax_arrays() {
     int idxu_half_count = 0;
     for (int j = 0; j <= twojmax; j++) {
         h_idxu_half_block(j) = idxu_half_count;
-        for (int mb = 0; 2*mb <= j; mb++)
+        for (int mb = 0; 2 * mb <= j; mb++)
             for (int ma = 0; ma <= j; ma++) idxu_half_count++;
     }
     idxu_half_max = idxu_half_count;
@@ -306,23 +307,23 @@ void SNA::create_twojmax_arrays() {
     h_idxu_full_half = create_mirror_view(idxu_full_half);
     idxu_count = 0;
     for (int j = 0; j <= twojmax; j++) {
-      int jju_half = h_idxu_half_block[j];
-      for (int mb = 0; mb <= j; mb++) {
-        for (int ma = 0; ma <= j; ma++) {
-          FullHalfMap map;
-          if (2*mb <= j) {
-            map.idxu_half = jju_half + mb * (j + 1) + ma;
-            map.flip_sign = 0;
-          } else {
-            map.idxu_half = jju_half + (j + 1 - mb) * (j + 1) - (ma + 1);
-            map.flip_sign = (((ma+mb)%2==0)?1:-1);
-          }
-          h_idxu_full_half[idxu_count] = map;
-          idxu_count++;
+        int jju_half = h_idxu_half_block[j];
+        for (int mb = 0; mb <= j; mb++) {
+            for (int ma = 0; ma <= j; ma++) {
+                FullHalfMap map;
+                if (2 * mb <= j) {
+                    map.idxu_half = jju_half + mb * (j + 1) + ma;
+                    map.flip_sign = 0;
+                } else {
+                    map.idxu_half =
+                        jju_half + (j + 1 - mb) * (j + 1) - (ma + 1);
+                    map.flip_sign = (((ma + mb) % 2 == 0) ? 1 : -1);
+                }
+                h_idxu_full_half[idxu_count] = map;
+                idxu_count++;
+            }
         }
-      }
     }
-
 
     // Ulist parity data structure resizing
     ulist_parity = int_View1D("ulist_parity", idxu_max);
@@ -358,19 +359,30 @@ void SNA::create_twojmax_arrays() {
     rootpqarray = double_View2D("rootpqarray", jdimpq, jdimpq);
     dedr = double_View3D("dedr", num_atoms, num_nbor, 3);
     rootpqparityarray = double_View2D("rootpqparityarray", jdimpq, jdimpq);
-#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
-    alist_gpu = SNAcomplex_View3DL("alist_gpu",vector_length, num_nbor, num_atoms_div);
-    blist_gpu = SNAcomplex_View3DL("blist_gpu",vector_length, num_nbor, num_atoms_div);
-    dalist_gpu = SNAcomplex_View4DL("dalist_gpu",vector_length, num_nbor, num_atoms_div, 3);
-    dblist_gpu = SNAcomplex_View4DL("dblist_gpu", vector_length, num_nbor, num_atoms_div, 3);
-    sfaclist_gpu = double_View4DL("sfaclist_gpu",vector_length, num_nbor, num_atoms_div, 4);
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) || \
+    defined(KOKKOS_ENABLE_SYCL)
+    alist_gpu =
+        SNAcomplex_View3DL("alist_gpu", vector_length, num_nbor, num_atoms_div);
+    blist_gpu =
+        SNAcomplex_View3DL("blist_gpu", vector_length, num_nbor, num_atoms_div);
+    dalist_gpu = SNAcomplex_View4DL("dalist_gpu", vector_length, num_nbor,
+                                    num_atoms_div, 3);
+    dblist_gpu = SNAcomplex_View4DL("dblist_gpu", vector_length, num_nbor,
+                                    num_atoms_div, 3);
+    sfaclist_gpu = double_View4DL("sfaclist_gpu", vector_length, num_nbor,
+                                  num_atoms_div, 4);
 
-    ulisttot_re_gpu = double_View3DL("ulisttot_re_gpu",vector_length, idxu_half_max, num_atoms_div);
-    ulisttot_im_gpu = double_View3DL("ulisttot_im_gpu",vector_length, idxu_half_max, num_atoms_div);
-    ulisttot_gpu = SNAcomplex_View3DL("ulisttot_gpu",vector_length, idxu_max, num_atoms_div);
+    ulisttot_re_gpu = double_View3DL("ulisttot_re_gpu", vector_length,
+                                     idxu_half_max, num_atoms_div);
+    ulisttot_im_gpu = double_View3DL("ulisttot_im_gpu", vector_length,
+                                     idxu_half_max, num_atoms_div);
+    ulisttot_gpu = SNAcomplex_View3DL("ulisttot_gpu", vector_length, idxu_max,
+                                      num_atoms_div);
 
-    ylist_re_gpu = double_View3DL("ylist_re_gpu",vector_length, idxu_half_max, num_atoms_div);
-    ylist_im_gpu = double_View3DL("ylist_im_gpu",vector_length, idxu_half_max, num_atoms_div);
+    ylist_re_gpu = double_View3DL("ylist_re_gpu", vector_length, idxu_half_max,
+                                  num_atoms_div);
+    ylist_im_gpu = double_View3DL("ylist_im_gpu", vector_length, idxu_half_max,
+                                  num_atoms_div);
 
 #else
     ylist = SNAcomplex_View2DR("ylist", num_atoms, idxdu_max);
@@ -379,7 +391,6 @@ void SNA::create_twojmax_arrays() {
     ulist = SNAcomplex_View3D("ulist", num_atoms, num_nbor, idxu_max);
 
 #endif
-
 
     h_dedr = create_mirror_view(dedr);
     h_cglist = create_mirror_view(cglist);
