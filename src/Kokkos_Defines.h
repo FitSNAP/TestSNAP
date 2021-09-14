@@ -29,6 +29,11 @@
 
 #include <Kokkos_Core.hpp>
 
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) || \
+    defined(KOKKOS_ENABLE_SYCL)
+#define SNAP_ENABLE_GPU
+#endif
+
 typedef double SNADOUBLE;
 struct alignas(2 * sizeof(SNADOUBLE)) SNAcomplex
 {

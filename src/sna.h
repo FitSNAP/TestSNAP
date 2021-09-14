@@ -66,8 +66,7 @@ struct ComputeFusedDeiDrjTagGPU {};
 
 class SNA {
     // Modify as appropriate
-#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) || \
-    defined(KOKKOS_ENABLE_SYCL)
+#ifdef SNAP_ENABLE_GPU
     static constexpr int vector_length = 32;
 #else
     static constexpr int vector_length = 1;
@@ -475,8 +474,7 @@ class SNA {
             int icga = ma1min * (j2 + 1) + ma2max;
 
             for (int ia = 0; ia < na; ia++) {
-#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) || \
-    defined(KOKKOS_ENABLE_SYCL)
+#ifdef SNAP_ENABLE_GPU
                 suma1_r += cgblock[icga] * (ulisttot(jju1 + ma1, natom).re *
                                                 ulisttot(jju2 + ma2, natom).re -
                                             ulisttot(jju1 + ma1, natom).im *
