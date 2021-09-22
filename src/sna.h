@@ -66,7 +66,7 @@ struct ComputeFusedDeiDrjTagGPU {};
 
 class SNA {
     // Modify as appropriate
-#ifdef SNAP_ENABLE_GPU
+#if defined(SNAP_ENABLE_GPU) && !defined(KOKKOS_ENABLE_OPENMPTARGET)
     static constexpr int vector_length = 32;
 #else
     static constexpr int vector_length = 1;
@@ -884,6 +884,13 @@ class SNA {
         int iter = team_member.league_rank() * team_member.team_size() +
                    team_member.team_rank();
 
+// Need this indirection because OMPT backend fails to compile with scalar
+// member variables if scratch memory is being used. No idea why :facepalm:
+#ifdef KOKKOS_ENABLE_OPENMPTARGET
+        int vector_length_loc = 1;
+#else
+        int vector_length_loc = vector_length;
+#endif
         // Unflatten bend location (fastest), neighbor (middle), natom mod
         // vector_length (slowest)
         int natom_div = iter / (num_nbor * (twojmax + 1));
@@ -893,7 +900,7 @@ class SNA {
         if (jbend >= (twojmax + 1)) return;
         if (nbor >= num_nbor) return;
 
-        const int PerTeamScratch = vector_length * (twojmax + 1);
+        const int PerTeamScratch = vector_length_loc * (twojmax + 1);
         ScratchViewType ulist_scratch(team_member.team_scratch(0),
                                       team_member.team_size() * PerTeamScratch);
 
@@ -903,9 +910,9 @@ class SNA {
         const int tid_index = tid * PerTeamScratch;
 
         Kokkos::parallel_for(
-            Kokkos::ThreadVectorRange(team_member, vector_length),
+            Kokkos::ThreadVectorRange(team_member, vector_length_loc),
             [&](const int natom_mod) {
-                int natom = natom_mod + natom_div * vector_length;
+                int natom = natom_mod + natom_div * vector_length_loc;
                 if (natom >= num_atoms) return;
 
                 const SNAcomplex a = alist_gpu(natom_mod, nbor, natom_div);
@@ -925,7 +932,7 @@ class SNA {
                     for (ma = 0; ma < j; ma++) {
                         // grab value from previous level
                         const SNAcomplex ulist_prev =
-                            ulist_scratch[tid_index + ma * vector_length +
+                            ulist_scratch[tid_index + ma * vector_length_loc +
                                           natom_mod];
 
                         // ulist_tmp += rootpq * a.conj * ulist_prev
@@ -936,7 +943,7 @@ class SNA {
                                                   a.im * ulist_prev.re);
 
                         // store ulist tmp for the next level
-                        ulist_scratch[tid_index + ma * vector_length +
+                        ulist_scratch[tid_index + ma * vector_length_loc +
                                       natom_mod] = ulist_tmp;
 
                         // compute next value
@@ -950,8 +957,8 @@ class SNA {
 
                     // store final ulist_tmp for the next level
 
-                    ulist_scratch[tid_index + ma * vector_length + natom_mod] =
-                        ulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length_loc +
+                                  natom_mod] = ulist_tmp;
                 }
 
                 // unique work for each jbend location
@@ -969,7 +976,7 @@ class SNA {
                     for (ma = 0; ma < j; ma++) {
                         // grab value from previous level
                         const SNAcomplex ulist_prev =
-                            ulist_scratch[tid_index + ma * vector_length +
+                            ulist_scratch[tid_index + ma * vector_length_loc +
                                           natom_mod];
 
                         // atomic add previous level into ulisttot
@@ -989,7 +996,7 @@ class SNA {
                                                   b.im * ulist_prev.re);
 
                         // store ulist tmp for the next level
-                        ulist_scratch[tid_index + ma * vector_length +
+                        ulist_scratch[tid_index + ma * vector_length_loc +
                                       natom_mod] = ulist_tmp;
 
                         // compute next value
@@ -1002,8 +1009,8 @@ class SNA {
                     }
 
                     // store final ulist_tmp for the next level
-                    ulist_scratch[tid_index + ma * vector_length + natom_mod] =
-                        ulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length_loc +
+                                  natom_mod] = ulist_tmp;
 
                     mb++;
                 }
@@ -1012,7 +1019,7 @@ class SNA {
                 const int jjup = idxu_half_block(j - 1) + (mb - 1) * j;
                 for (int ma = 0; ma < j; ma++) {
                     const SNAcomplex ulist_prev =
-                        ulist_scratch[tid_index + ma * vector_length +
+                        ulist_scratch[tid_index + ma * vector_length_loc +
                                       natom_mod];
                     Kokkos::atomic_add(
                         &(ulisttot_re_gpu(natom_mod, jjup + ma, natom_div)),
@@ -1132,6 +1139,14 @@ class SNA {
         int iter = team_member.league_rank() * team_member.team_size() +
                    team_member.team_rank();
 
+// Need this indirection because OMPT backend fails to compile with scalar
+// member variables if scratch memory is being used. No idea why :facepalm:
+#ifdef KOKKOS_ENABLE_OPENMPTARGET
+        int vector_length_loc = 1;
+#else
+        int vector_length_loc = vector_length;
+#endif
+
         // Unflatten bend location (fastest), neighbor (middle), natom mod
         // vector_length (slowest)
         int natom_div = iter / (num_nbor * (twojmax + 1));
@@ -1143,7 +1158,7 @@ class SNA {
         if (nbor >= num_nbor) return;
 
         // caching buffers for ulist, dulist
-        const int PerTeamScratch = vector_length * (twojmax + 1);
+        const int PerTeamScratch = vector_length_loc * (twojmax + 1);
         ScratchViewType ulist_scratch(team_member.team_scratch(0),
                                       team_member.team_size() * PerTeamScratch);
         ScratchViewType dulist_scratch(
@@ -1156,9 +1171,9 @@ class SNA {
         const int tid_index = tid * PerTeamScratch;
 
         Kokkos::parallel_for(
-            Kokkos::ThreadVectorRange(team_member, vector_length),
+            Kokkos::ThreadVectorRange(team_member, vector_length_loc),
             [&](const int natom_mod) {
-                int natom = natom_mod + natom_div * vector_length;
+                int natom = natom_mod + natom_div * vector_length_loc;
                 if (natom >= num_atoms) return;
 
                 const SNAcomplex a = alist_gpu(natom_mod, nbor, natom_div);
@@ -1189,10 +1204,10 @@ class SNA {
                     for (ma = 0; ma < j; ma++) {
                         // grab value from previous level
                         const SNAcomplex ulist_prev =
-                            ulist_scratch[tid_index + ma * vector_length +
+                            ulist_scratch[tid_index + ma * vector_length_loc +
                                           natom_mod];
                         const SNAcomplex dulist_prev =
-                            dulist_scratch[tid_index + ma * vector_length +
+                            dulist_scratch[tid_index + ma * vector_length_loc +
                                            natom_mod];
 
                         // ulist_tmp += rootpq * a.conj * ulist_prev
@@ -1213,9 +1228,9 @@ class SNA {
                              a.re * dulist_prev.im - a.im * dulist_prev.re);
 
                         // store ulist, dulist tmp for the next level
-                        ulist_scratch[tid_index + ma * vector_length +
+                        ulist_scratch[tid_index + ma * vector_length_loc +
                                       natom_mod] = ulist_tmp;
-                        dulist_scratch[tid_index + ma * vector_length +
+                        dulist_scratch[tid_index + ma * vector_length_loc +
                                        natom_mod] = dulist_tmp;
 
                         // compute next value
@@ -1238,10 +1253,10 @@ class SNA {
                     }
 
                     // store final ulist_tmp, dulist_tmp for the next level
-                    ulist_scratch[tid_index + ma * vector_length + natom_mod] =
-                        ulist_tmp;
-                    dulist_scratch[tid_index + ma * vector_length + natom_mod] =
-                        dulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length_loc +
+                                  natom_mod] = ulist_tmp;
+                    dulist_scratch[tid_index + ma * vector_length_loc +
+                                   natom_mod] = dulist_tmp;
                 }
 
                 // unique work for each jbend location
@@ -1265,10 +1280,10 @@ class SNA {
 
                         // grab value from previous level
                         const SNAcomplex ulist_prev =
-                            ulist_scratch[tid_index + ma * vector_length +
+                            ulist_scratch[tid_index + ma * vector_length_loc +
                                           natom_mod];
                         const SNAcomplex dulist_prev =
-                            dulist_scratch[tid_index + ma * vector_length +
+                            dulist_scratch[tid_index + ma * vector_length_loc +
                                            natom_mod];
 
                         // compute next level of U matrices
@@ -1290,9 +1305,9 @@ class SNA {
                              b.re * dulist_prev.im + b.im * dulist_prev.re);
 
                         // store ulist tmp for the next level
-                        ulist_scratch[tid_index + ma * vector_length +
+                        ulist_scratch[tid_index + ma * vector_length_loc +
                                       natom_mod] = ulist_tmp;
-                        dulist_scratch[tid_index + ma * vector_length +
+                        dulist_scratch[tid_index + ma * vector_length_loc +
                                        natom_mod] = dulist_tmp;
 
                         // accumulate dedr
@@ -1322,10 +1337,10 @@ class SNA {
                     }
 
                     // store final ulist_tmp for the next level
-                    ulist_scratch[tid_index + ma * vector_length + natom_mod] =
-                        ulist_tmp;
-                    dulist_scratch[tid_index + ma * vector_length + natom_mod] =
-                        dulist_tmp;
+                    ulist_scratch[tid_index + ma * vector_length_loc +
+                                  natom_mod] = ulist_tmp;
+                    dulist_scratch[tid_index + ma * vector_length_loc +
+                                   natom_mod] = dulist_tmp;
 
                     mb++;
                 }
@@ -1348,10 +1363,10 @@ class SNA {
                     }
 
                     const SNAcomplex ulist_prev =
-                        ulist_scratch[tid_index + ma * vector_length +
+                        ulist_scratch[tid_index + ma * vector_length_loc +
                                       natom_mod];
                     const SNAcomplex dulist_prev =
-                        dulist_scratch[tid_index + ma * vector_length +
+                        dulist_scratch[tid_index + ma * vector_length_loc +
                                        natom_mod];
 
                     // Directly accumulate deidrj
@@ -1363,7 +1378,8 @@ class SNA {
                 }
 
                 Kokkos::atomic_add(
-                    &(dedr(natom_mod + vector_length * natom_div, nbor, dir)),
+                    &(dedr(natom_mod + vector_length_loc * natom_div, nbor,
+                           dir)),
                     2. * dedr_sum);
             });
     }
@@ -1478,7 +1494,11 @@ class SNA {
         }
 
         {
+#ifdef KOKKOS_ENABLE_OPENMPTARGET
+            int team_size = 32;
+#else
             int team_size = 4;
+#endif
             int num_teams = num_atoms_div * num_nbor * (twojmax + 1);
             int num_teams_div = (num_teams + team_size - 1) / team_size;
 
@@ -1533,7 +1553,11 @@ class SNA {
       fused compute_duarray, compute_deidrj
     ------------------------------------------------------------------------- */
     void compute_fused_deidrj_gpu() {
+#ifdef KOKKOS_ENABLE_OPENMPTARGET
+        int team_size = 32;
+#else
         int team_size = 2;
+#endif
         int num_teams = num_atoms_div * num_nbor * (twojmax + 1);
         int num_teams_div = (num_teams + team_size - 1) / team_size;
 

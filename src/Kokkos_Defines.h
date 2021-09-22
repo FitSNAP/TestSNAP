@@ -30,7 +30,7 @@
 #include <Kokkos_Core.hpp>
 
 #if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) || \
-    defined(KOKKOS_ENABLE_SYCL)
+    defined(KOKKOS_ENABLE_SYCL) || defined(KOKKOS_ENABLE_OPENMPTARGET)
 #define SNAP_ENABLE_GPU
 #endif
 
