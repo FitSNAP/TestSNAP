@@ -44,6 +44,8 @@
 #include "refdata_2J2_W.h"
 #elif REFDATA_TWOJ==4
 #include "refdata_2J4_W.h"
+#elif REFDATA_TWOJ==14100
+#include "refdata_2J14_W_n100.h"
 #endif
 
 /* ---------------------------------------------------------------------- */
