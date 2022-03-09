@@ -77,7 +77,27 @@ endif
 	ifeq ($(OPENMP_TARGET),y)
 		CXXFLAGS += -fopenmp
 		CXXFLAGS += -fopenmp-targets=nvptx64-nvidia-cuda --cuda-path=${CUDA_PATH} -I${CUDA_PATH}/include -ffp-contract=fast
+		ifeq ($(NERSC_HOST),$(filter $(NERSC_HOST),cori perlmutter))
+			CXXFLAGS += $(LLVM_CFLAGS)
+		endif
 	endif
+endif
+
+ifeq ($(COMP),nvhpc)
+	CXX=nvc++
+	CXXFLAGS += -std=c++17
+  ifeq ($(OPENMP),y)
+    CFLAGS += -mp
+	endif
+  ifeq ($(OPENMP_TARGET),y)
+	ifeq ($(NERSC_HOST),cori)
+		CFLAGS += -mp=gpu -gpu=cc70
+	endif
+	ifeq ($(NERSC_HOST),perlmutter)
+		CFLAGS += -mp=gpu -gpu=cc70
+	endif
+  endif
+  CXXFLAGS += $(CFLAGS) -std=c++11 $(DEFINE)
 endif
 
 ifeq ($(COMP),pgi)
