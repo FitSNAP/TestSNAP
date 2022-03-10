@@ -25,6 +25,10 @@ else
 	CUDA_PATH?=$(CUDA_ROOT)
 endif
 
+ifeq ($(OPENMP),y)
+	DEFINE += -DOPENMP
+endif
+
 ifeq ($(OPENMP_TARGET),y)
 	DEFINE += -DOPENMP_TARGET
 endif
