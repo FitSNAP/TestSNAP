@@ -80,7 +80,7 @@ ifeq ($(OPENMP),y)
 endif
 	ifeq ($(OPENMP_TARGET),y)
 		CXXFLAGS += -fopenmp
-		CXXFLAGS += -fopenmp-targets=nvptx64-nvidia-cuda --cuda-path=${CUDA_PATH} -I${CUDA_PATH}/include -ffp-contract=fast
+		CXXFLAGS += -fopenmp-targets=nvptx64-nvidia-cuda --cuda-path=${CUDA_HOME} -I${CUDA_HOME}/include -ffp-contract=fast
 		ifeq ($(NERSC_HOST),$(filter $(NERSC_HOST),cori perlmutter))
 			CXXFLAGS += $(LLVM_CFLAGS)
 		endif
