@@ -90,17 +90,18 @@ endif
 ifeq ($(COMP),nvhpc)
 	CXX=nvc++
 	CXXFLAGS += -std=c++17
-  ifeq ($(OPENMP),y)
-    CFLAGS += -mp
+	ifeq ($(OPENMP),y)
+		CFLAGS += -mp
 	endif
-  ifeq ($(OPENMP_TARGET),y)
-	ifeq ($(NERSC_HOST),cori)
-		CFLAGS += -mp=gpu -gpu=cc70
+	ifeq ($(OPENMP_TARGET),y)
+		CFLAGS += -mp=gpu
+		ifeq ($(NERSC_HOST),cori)
+			CFLAGS += -gpu=cc70
+		endif
+		ifeq ($(NERSC_HOST),perlmutter)
+			CFLAGS += -gpu=cc80
+		endif
 	endif
-	ifeq ($(NERSC_HOST),perlmutter)
-		CFLAGS += -mp=gpu -gpu=cc70
-	endif
-  endif
   CXXFLAGS += $(CFLAGS) -std=c++11 $(DEFINE)
 endif
 
